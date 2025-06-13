@@ -1,13 +1,16 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import logging
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 SCOPE = [
     'https://spreadsheets.google.com/feeds',
-    'https://www.googleapis.com/auth/drive'
+    'https://www.googleapis.com/auth/drive',
 ]
+SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
-CREDS_FILE = 'coordinate-462818-25b2ec4c500a.json'
+CREDS_FILE = 'coordinate-462818-8da128264452.json'
 
 logger = logging.getLogger(__name__)
 
@@ -221,3 +224,69 @@ def get_record_by_id(spreadsheet_id: str, sheet_name: str, record_id: str):
         
     except Exception as e:
         logger.error(f"Ошибка получения записи {record_id} из Google Sheet: {e}")
+        
+
+def get_all_spreadsheets():
+    """Получает список всех Google Spreadsheets через Google Drive API"""
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            CREDS_FILE, scopes=SCOPES
+        )
+        service = build('drive', 'v3', credentials=creds)
+
+        query = "mimeType='application/vnd.google-apps.spreadsheet'"
+        results = service.files().list(
+            q=query,
+            pageSize=1000,
+            fields="files(id, name)"
+        ).execute()
+
+        items = results.get('files', [])
+        spreadsheets = []
+        for file in items:
+            spreadsheets.append({
+                'id': file['id'],
+                'name': file['name'],
+                'url': f"https://docs.google.com/spreadsheets/d/{file['id']}/edit"
+            })
+
+        print(f"Найдено {len(spreadsheets)} таблиц")
+        return spreadsheets
+
+    except Exception as e:
+        print(f"Ошибка получения списка таблиц: {e}")
+        return []
+
+def get_spreadsheet_info(spreadsheet_id: str):
+    """Получает подробную информацию о конкретной таблице"""
+    try:
+        sheet = open_sheet_by_id(spreadsheet_id)
+        if not sheet:
+            return None
+        
+        worksheets = sheet.worksheets()
+        sheets_info = []
+        
+        for worksheet in worksheets:
+            info = {
+                'title': worksheet.title,
+                'id': worksheet.id,
+                'row_count': worksheet.row_count,
+                'col_count': worksheet.col_count,
+                'url': worksheet.url
+            }
+            sheets_info.append(info)
+        
+        spreadsheet_info = {
+            'id': spreadsheet_id,
+            'title': sheet.title,
+            'url': sheet.url,
+            'sheets': sheets_info,
+            'sheets_count': len(sheets_info)
+        }
+        
+        return spreadsheet_info
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения информации о таблице {spreadsheet_id}: {e}")
+        return None

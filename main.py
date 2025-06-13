@@ -4,7 +4,9 @@ import os
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters, CallbackContext
-from google_connector import get_worksheets_info, add_record_to_sheet, update_record_in_sheet, delete_record_from_sheet, get_record_by_id
+from google_connector import (get_worksheets_info, add_record_to_sheet, 
+                            update_record_in_sheet, delete_record_from_sheet, 
+                            get_record_by_id, get_all_spreadsheets, get_spreadsheet_info)
 from database import init_db, add_record_to_db, update_record_in_db, delete_record_from_db, get_record_from_db, get_db_stats
 import uuid
 
@@ -79,6 +81,7 @@ def create_main_menu():
     """Создает основное меню бота"""
     keyboard = [
         [InlineKeyboardButton("➕ Добавить запись", callback_data="add_record")],
+        [InlineKeyboardButton("📊 Выбрать таблицу", callback_data="select_spreadsheet")],
         [InlineKeyboardButton("📋 Выбрать лист", callback_data="select_sheet")],
         [InlineKeyboardButton("📊 Статус", callback_data="status")],
         [InlineKeyboardButton("📈 Статистика", callback_data="stats")]
@@ -213,14 +216,20 @@ async def button_handler(update: Update, context: CallbackContext):
     
     if data == "add_record":
         return await start_add_record(update, context)
+    elif data == "select_spreadsheet":
+        return await select_spreadsheet_menu(update, context)
     elif data == "select_sheet":
         return await select_sheet_menu(update, context)
     elif data == "status":
         return await show_status(update, context)
     elif data == "stats":
         return await show_stats(update, context)
+    elif data.startswith("spreadsheet_"):
+        return await select_spreadsheet(update, context)
     elif data.startswith("sheet_"):
         return await select_sheet(update, context)
+    elif data.startswith("final_sheet_"):
+        return await select_final_sheet(update, context)
     elif data.startswith("edit_"):
         return await handle_edit_button(update, context)
     elif data.startswith("delete_"):
@@ -795,7 +804,7 @@ async def recent_command(update: Update, context: CallbackContext):
         limit = 5
         if args:
             try:
-                limit = min(int(args[0]), 20)  # Максимум 20 записей
+                limit = min(int(args[0]), 1000)  # Максимум 1000 записей
             except ValueError:
                 pass
         
@@ -974,6 +983,138 @@ def main():
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске бота: {e}")
         print(f"❌ Критическая ошибка: {e}")
+
+async def select_spreadsheet_menu(update: Update, context: CallbackContext):
+    """Показывает меню выбора Google Spreadsheet"""
+    query = update.callback_query
+    
+    from google_connector import get_all_spreadsheets
+    
+    try:
+        spreadsheets = get_all_spreadsheets()
+        
+        if not spreadsheets:
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]]
+            await query.edit_message_text(
+                "❌ Доступные таблицы не найдены.\n"
+                "Убедитесь, что сервисный аккаунт имеет доступ к таблицам.",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+        
+        keyboard = []
+        for spreadsheet in spreadsheets[:10]:  # Показываем максимум 10 таблиц
+            # Ограничиваем длину названия для кнопки
+            name = spreadsheet['name'][:30] + "..." if len(spreadsheet['name']) > 30 else spreadsheet['name']
+            keyboard.append([InlineKeyboardButton(
+                f"📊 {name}", 
+                callback_data=f"spreadsheet_{spreadsheet['id']}"
+            )])
+        
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")])
+        
+        text = f"📊 Выберите Google Spreadsheet ({len(spreadsheets)} доступно):"
+        if len(spreadsheets) > 10:
+            text += f"\n\nПоказаны первые 10 таблиц."
+        
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]]
+        await query.edit_message_text(
+            f"⚠️ Ошибка получения списка таблиц: {e}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def select_spreadsheet(update: Update, context: CallbackContext):
+    """Выбирает конкретную Google Spreadsheet и показывает её листы"""
+    query = update.callback_query
+    spreadsheet_id = query.data.replace("spreadsheet_", "")
+    
+    from google_connector import get_spreadsheet_info
+    
+    try:
+        spreadsheet_info = get_spreadsheet_info(spreadsheet_id)
+        
+        if not spreadsheet_info:
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="select_spreadsheet")]]
+            await query.edit_message_text(
+                "❌ Не удалось получить информацию о таблице.",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+        
+        if not spreadsheet_info['sheets']:
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="select_spreadsheet")]]
+            await query.edit_message_text(
+                f"❌ В таблице '{spreadsheet_info['title']}' нет листов.",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+        
+        # Временно сохраняем выбранную таблицу
+        context.user_data['selected_spreadsheet_id'] = spreadsheet_id
+        context.user_data['selected_spreadsheet_title'] = spreadsheet_info['title']
+        
+        keyboard = []
+        for sheet in spreadsheet_info['sheets']:
+            # Показываем информацию о количестве строк
+            sheet_info = f"{sheet['title']} ({sheet['row_count']} строк)"
+            keyboard.append([InlineKeyboardButton(
+                f"📋 {sheet_info}", 
+                callback_data=f"final_sheet_{sheet['title']}"
+            )])
+        
+        keyboard.append([InlineKeyboardButton("⬅️ К списку таблиц", callback_data="select_spreadsheet")])
+        
+        await query.edit_message_text(
+            f"📊 Таблица: <b>{spreadsheet_info['title']}</b>\n"
+            f"📋 Листов: {spreadsheet_info['sheets_count']}\n\n"
+            f"Выберите лист для работы:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+        
+    except Exception as e:
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="select_spreadsheet")]]
+        await query.edit_message_text(
+            f"⚠️ Ошибка: {e}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def select_final_sheet(update: Update, context: CallbackContext):
+    """Окончательно выбирает лист и сохраняет настройки"""
+    query = update.callback_query
+    sheet_name = query.data.replace("final_sheet_", "")
+    
+    # Получаем данные из user_data
+    spreadsheet_id = context.user_data.get('selected_spreadsheet_id')
+    spreadsheet_title = context.user_data.get('selected_spreadsheet_title')
+    
+    if not spreadsheet_id:
+        await query.edit_message_text("❌ Ошибка: таблица не выбрана.")
+        return
+    
+    # Сохраняем выбранные настройки
+    set_active_spreadsheet(spreadsheet_id, sheet_name)
+    
+    await query.edit_message_text(
+        f"✅ Настройка завершена!\n\n"
+        f"📊 Таблица: <b>{spreadsheet_title}</b>\n"
+        f"📋 Лист: <b>{sheet_name}</b>\n\n"
+        f"Теперь вы можете добавлять записи!",
+        parse_mode="HTML",
+        reply_markup=create_main_menu()
+    )
+    
+    await send_to_log_chat(context, f"Выбрана таблица: {spreadsheet_title}, лист: {sheet_name}")
+    
+    # Очищаем временные данные
+    context.user_data.pop('selected_spreadsheet_id', None)
+    context.user_data.pop('selected_spreadsheet_title', None)
 
 if __name__ == '__main__':
     main()
