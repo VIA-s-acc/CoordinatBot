@@ -1,7 +1,7 @@
 import sqlite3
 import logging
-from datetime import datetime
-import os
+from datetime import datetime, timedelta
+from typing import Dict, Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = 'expenses.db'
 
 def init_db():
-    """Инициализирует базу данных и создает таблицы"""
+    """Инициализация базы данных"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -23,8 +23,8 @@ def init_db():
                 direction TEXT NOT NULL,
                 description TEXT NOT NULL,
                 amount REAL NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -37,7 +37,7 @@ def init_db():
         logger.error(f"Ошибка инициализации базы данных: {e}")
         return False
 
-def add_record_to_db(record: dict):
+def add_record_to_db(record: Dict) -> bool:
     """Добавляет запись в базу данных"""
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -47,32 +47,32 @@ def add_record_to_db(record: dict):
             INSERT INTO records (id, date, supplier, direction, description, amount)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (
-            record.get('id', ''),
-            record.get('date', ''),
-            record.get('supplier', ''),
-            record.get('direction', ''),
-            record.get('description', ''),
+            record.get('id'),
+            record.get('date'),
+            record.get('supplier'),
+            record.get('direction'),
+            record.get('description'),
             record.get('amount', 0)
         ))
         
         conn.commit()
         conn.close()
-        logger.info(f"Запись {record.get('id')} добавлена в базу данных")
+        logger.info(f"Запись {record.get('id')} добавлена в БД")
         return True
         
     except Exception as e:
         logger.error(f"Ошибка добавления записи в БД: {e}")
         return False
 
-def update_record_in_db(record_id: str, field: str, new_value):
-    """Обновляет поле записи в базе данных"""
+def update_record_in_db(record_id: str, field: str, new_value) -> bool:
+    """Обновляет запись в базе данных"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        # Проверяем, что поле существует
-        valid_fields = ['date', 'supplier', 'direction', 'description', 'amount']
-        if field not in valid_fields:
+        # Проверяем допустимые поля
+        allowed_fields = ['date', 'supplier', 'direction', 'description', 'amount']
+        if field not in allowed_fields:
             logger.error(f"Недопустимое поле для обновления: {field}")
             return False
         
@@ -81,20 +81,20 @@ def update_record_in_db(record_id: str, field: str, new_value):
         cursor.execute(query, (new_value, record_id))
         
         if cursor.rowcount == 0:
-            logger.warning(f"Запись {record_id} не найдена в БД для обновления")
+            logger.warning(f"Запись с ID {record_id} не найдена в БД")
             conn.close()
             return False
         
         conn.commit()
         conn.close()
-        logger.info(f"Обновлено поле {field} записи {record_id} в БД")
+        logger.info(f"Запись {record_id} обновлена в БД: {field} = {new_value}")
         return True
         
     except Exception as e:
         logger.error(f"Ошибка обновления записи в БД: {e}")
         return False
 
-def delete_record_from_db(record_id: str):
+def delete_record_from_db(record_id: str) -> bool:
     """Удаляет запись из базы данных"""
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -103,7 +103,7 @@ def delete_record_from_db(record_id: str):
         cursor.execute("DELETE FROM records WHERE id = ?", (record_id,))
         
         if cursor.rowcount == 0:
-            logger.warning(f"Запись {record_id} не найдена в БД для удаления")
+            logger.warning(f"Запись с ID {record_id} не найдена в БД для удаления")
             conn.close()
             return False
         
@@ -116,20 +116,22 @@ def delete_record_from_db(record_id: str):
         logger.error(f"Ошибка удаления записи из БД: {e}")
         return False
 
-def get_record_from_db(record_id: str):
+def get_record_from_db(record_id: str) -> Optional[Dict]:
     """Получает запись из базы данных по ID"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        cursor.execute("SELECT * FROM records WHERE id = ?", (record_id,))
-        row = cursor.fetchone()
+        cursor.execute('''
+            SELECT id, date, supplier, direction, description, amount, created_at, updated_at
+            FROM records WHERE id = ?
+        ''', (record_id,))
         
+        row = cursor.fetchone()
         conn.close()
         
         if row:
-            # Преобразуем результат в словарь
-            record = {
+            return {
                 'id': row[0],
                 'date': row[1],
                 'supplier': row[2],
@@ -139,64 +141,14 @@ def get_record_from_db(record_id: str):
                 'created_at': row[6],
                 'updated_at': row[7]
             }
-            return record
         
         return None
         
     except Exception as e:
-        logger.error(f"Ошибка получения записи {record_id} из БД: {e}")
+        logger.error(f"Ошибка получения записи из БД: {e}")
         return None
 
-def get_all_records_from_db():
-    """Получает все записи из базы данных"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM records ORDER BY created_at DESC")
-        rows = cursor.fetchall()
-        
-        conn.close()
-        
-        records = []
-        for row in rows:
-            record = {
-                'id': row[0],
-                'date': row[1],
-                'supplier': row[2],
-                'direction': row[3],
-                'description': row[4],
-                'amount': row[5],
-                'created_at': row[6],
-                'updated_at': row[7]
-            }
-            records.append(record)
-        
-        return records
-        
-    except Exception as e:
-        logger.error(f"Ошибка получения всех записей из БД: {e}")
-        return []
-
-def backup_db_to_file(backup_path: str = None):
-    """Создает резервную копию базы данных"""
-    try:
-        if not backup_path:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = f"backup_expenses_{timestamp}.db"
-        
-        # Копируем файл базы данных
-        import shutil
-        shutil.copy2(DB_PATH, backup_path)
-        
-        logger.info(f"Резервная копия БД создана: {backup_path}")
-        return backup_path
-        
-    except Exception as e:
-        logger.error(f"Ошибка создания резервной копии БД: {e}")
-        return None
-
-def get_db_stats():
+def get_db_stats() -> Optional[Dict]:
     """Получает статистику базы данных"""
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -206,15 +158,13 @@ def get_db_stats():
         cursor.execute("SELECT COUNT(*) FROM records")
         total_records = cursor.fetchone()[0]
         
-        # Сумма всех расходов
+        # Общая сумма
         cursor.execute("SELECT SUM(amount) FROM records")
         total_amount = cursor.fetchone()[0] or 0
         
-        # Количество записей за последние 30 дней
-        cursor.execute("""
-            SELECT COUNT(*) FROM records 
-            WHERE date >= date('now', '-30 days')
-        """)
+        # Записи за последние 30 дней
+        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        cursor.execute("SELECT COUNT(*) FROM records WHERE date >= ?", (thirty_days_ago,))
         recent_records = cursor.fetchone()[0]
         
         conn.close()
@@ -227,4 +177,92 @@ def get_db_stats():
         
     except Exception as e:
         logger.error(f"Ошибка получения статистики БД: {e}")
+        return None
+
+def get_all_records(limit: int = 100) -> List[Dict]:
+    """Получает все записи из базы данных"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, date, supplier, direction, description, amount, created_at, updated_at
+            FROM records 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        ''', (limit,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        records = []
+        for row in rows:
+            records.append({
+                'id': row[0],
+                'date': row[1],
+                'supplier': row[2],
+                'direction': row[3],
+                'description': row[4],
+                'amount': row[5],
+                'created_at': row[6],
+                'updated_at': row[7]
+            })
+        
+        return records
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения записей из БД: {e}")
+        return []
+
+def search_records(query: str, limit: int = 50) -> List[Dict]:
+    """Поиск записей по тексту"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        search_query = f"%{query}%"
+        cursor.execute('''
+            SELECT id, date, supplier, direction, description, amount, created_at, updated_at
+            FROM records 
+            WHERE supplier LIKE ? OR direction LIKE ? OR description LIKE ?
+            ORDER BY created_at DESC 
+            LIMIT ?
+        ''', (search_query, search_query, search_query, limit))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        records = []
+        for row in rows:
+            records.append({
+                'id': row[0],
+                'date': row[1],
+                'supplier': row[2],
+                'direction': row[3],
+                'description': row[4],
+                'amount': row[5],
+                'created_at': row[6],
+                'updated_at': row[7]
+            })
+        
+        return records
+        
+    except Exception as e:
+        logger.error(f"Ошибка поиска записей в БД: {e}")
+        return []
+
+def backup_db_to_dict() -> Optional[Dict]:
+    """Создает резервную копию базы данных в виде словаря"""
+    try:
+        records = get_all_records(limit=10000)  # Получаем все записи
+        stats = get_db_stats()
+        
+        return {
+            'backup_date': datetime.now().isoformat(),
+            'stats': stats,
+            'records': records
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка создания резервной копии БД: {e}")
         return None

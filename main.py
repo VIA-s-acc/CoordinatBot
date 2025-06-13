@@ -98,9 +98,23 @@ def create_edit_menu(record_id: str):
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def format_record_info(record: dict) -> str:
+    """Форматирует информацию о записи"""
+    return (
+        f"🆔 ID: <code>{record.get('id', 'N/A')}</code>\n"
+        f"📅 Дата: <b>{record.get('date', 'N/A')}</b>\n"
+        f"🏪 Поставщик: <b>{record.get('supplier', 'N/A')}</b>\n"
+        f"🧭 Направление: <b>{record.get('direction', 'N/A')}</b>\n"
+        f"📝 Описание: <b>{record.get('description', 'N/A')}</b>\n"
+        f"💰 Сумма: <b>{record.get('amount', 0):,.2f}</b>"
+    )
+
 # === Обработчики команд ===
 
 async def start(update: Update, context: CallbackContext):
+    # Инициализируем базу данных при запуске
+    init_db()
+    
     await update.message.reply_text(
         "👋 Добро пожаловать в бот учёта расходов!\n\n"
         "Функции:\n"
@@ -430,43 +444,4 @@ async def get_description(update: Update, context: CallbackContext):
     
     return AMOUNT
 
-async def get_amount(update: Update, context: CallbackContext):
-    amount_text = update.message.text.strip()
-    
-    try:
-        amount = float(amount_text)
-        context.user_data['record']['amount'] = amount
-    except ValueError:
-        await update.message.reply_text(
-            "❌ Неверный формат суммы. Введите число (например: 1000 или 1000.50):"
-        )
-        return AMOUNT
-    
-    # Сохраняем запись
-    record = context.user_data['record']
-    
-    try:
-        # Добавляем в Google Sheets
-        spreadsheet_id = get_active_spreadsheet_id()
-        sheet_name = get_active_sheet_name()
-        
-        sheet_success = add_record_to_sheet(spreadsheet_id, sheet_name, record)
-        
-        # Добавляем в базу данных
-        db_success = add_record_to_db(record)
-        
-        # Формируем сообщение о результате
-        if sheet_success and db_success:
-            status = "✅ Запись успешно добавлена в Google Sheets и базу данных!"
-            log_message = f"Добавлена запись ID: {record['id']}"
-        elif sheet_success:
-            status = "⚠️ Запись добавлена в Google Sheets, но возникла ошибка с базой данных."
-            log_message = f"Запись ID: {record['id']} добавлена только в Google Sheets"
-        elif db_success:
-            status = "⚠️ Запись добавлена в базу данных, но возникла ошибка с Google Sheets."
-            log_message = f"Запись ID: {record['id']} добавлена только в БД"
-        else:
-            status = "❌ Ошибка при сохранении записи!"
-            log_message = f"Ошибка сохранения записи ID: {record['id']}"
-        
-        # Отправляем результат с кнопкой ред
+async
