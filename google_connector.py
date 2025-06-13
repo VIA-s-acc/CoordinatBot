@@ -6,7 +6,7 @@ SCOPE = [
     'https://www.googleapis.com/auth/drive'
 ]
 
-CREDS_FILE = 'coordinate-462818-25b2ec4c500a.json'
+CREDS_FILE = 'coordinate-462818-8da128264452.json'
 
 def get_client():
     creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, SCOPE)

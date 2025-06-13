@@ -2,9 +2,9 @@ import json
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 from google_connector import list_spreadsheets, open_sheet_by_id
-
+import os 
 # === Конфигурация ===
-TOKEN = '7882932008:AAFpArzQbN_XxTmcLJJlveNvqFoQ9meWK8g'
+TOKEN = os.environ.get('TOKEN')
 CONFIG_FILE = 'config.json'
 spreadsheet_map = {}
 
