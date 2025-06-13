@@ -654,7 +654,326 @@ async def confirm_delete(update: Update, context: CallbackContext):
     sheet_success = delete_record_from_sheet(spreadsheet_id, sheet_name, record_id)
     
     # Результат
+    # Результат
     if db_success and sheet_success:
         result_text = f"✅ Запись ID: <code>{record_id}</code> удалена"
     elif db_success:
-        result_text = f"✅
+        result_text = f"✅ Запись удалена из БД\n⚠️ Ошибка удаления из Google Sheets"
+    elif sheet_success:
+        result_text = f"⚠️ Ошибка удаления из БД\n✅ Запись удалена из Google Sheets"
+    else:
+        result_text = f"❌ Ошибка удаления записи ID: <code>{record_id}</code>"
+    
+    await query.edit_message_text(
+        result_text,
+        parse_mode="HTML",
+        reply_markup=create_main_menu()
+    )
+    
+    # Отправляем в лог-чат
+    await send_to_log_chat(context, f"Удалена запись ID: {record_id}")
+    
+    return ConversationHandler.END
+
+# === Обработчик отмены ===
+
+async def cancel(update: Update, context: CallbackContext):
+    """Отменяет текущую операцию"""
+    await update.message.reply_text(
+        "❌ Операция отменена.",
+        reply_markup=create_main_menu()
+    )
+    context.user_data.clear()
+    return ConversationHandler.END
+
+# === Обработчик ошибок ===
+
+async def error_handler(update: object, context: CallbackContext) -> None:
+    """Обрабатывает ошибки"""
+    logger.error(f"Exception while handling an update: {context.error}")
+    
+    # Отправляем ошибку в лог-чат
+    if context.error:
+        await send_to_log_chat(context, f"ОШИБКА: {str(context.error)}")
+
+# === Команда поиска записей ===
+
+async def search_command(update: Update, context: CallbackContext):
+    """Команда поиска записей"""
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "🔍 Поиск записей:\n"
+            "Используйте: <code>/search [текст для поиска]</code>\n\n"
+            "Поиск производится по полям: поставщик, направление, описание",
+            parse_mode="HTML"
+        )
+        return
+    
+    query = " ".join(args)
+    
+    try:
+        from database import search_records
+        records = search_records(query, limit=10)
+        
+        if not records:
+            await update.message.reply_text(
+                f"🔍 По запросу '<b>{query}</b>' ничего не найдено.",
+                parse_mode="HTML"
+            )
+            return
+        
+        result_text = f"🔍 Найдено {len(records)} записей по запросу '<b>{query}</b>':\n\n"
+        
+        for i, record in enumerate(records, 1):
+            result_text += f"{i}. ID: <code>{record['id']}</code>\n"
+            result_text += f"   📅 {record['date']} | 💰 {record['amount']:,.2f}\n"
+            result_text += f"   🏪 {record['supplier']}\n"
+            result_text += f"   📝 {record['description'][:50]}{'...' if len(record['description']) > 50 else ''}\n\n"
+        
+        # Если записей много, предупреждаем
+        if len(records) == 10:
+            result_text += "ℹ️ Показаны первые 10 результатов. Уточните запрос для более точного поиска."
+        
+        await update.message.reply_text(result_text, parse_mode="HTML")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка поиска: {e}")
+
+# === Команда экспорта данных ===
+
+async def export_command(update: Update, context: CallbackContext):
+    """Команда экспорта данных"""
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS and len(ADMIN_IDS) > 0:
+        await update.message.reply_text("❌ У вас нет прав для выполнения этой команды.")
+        return
+    
+    try:
+        from database import backup_db_to_dict
+        backup_data = backup_db_to_dict()
+        
+        if not backup_data:
+            await update.message.reply_text("❌ Ошибка создания резервной копии.")
+            return
+        
+        # Создаем JSON файл
+        import json
+        filename = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(backup_data, f, indent=2, ensure_ascii=False)
+        
+        # Отправляем файл
+        with open(filename, 'rb') as f:
+            await update.message.reply_document(
+                document=f,
+                filename=filename,
+                caption=f"📤 Резервная копия базы данных\n"
+                       f"📊 Записей: {backup_data['stats']['total_records']}\n"
+                       f"💰 Общая сумма: {backup_data['stats']['total_amount']:,.2f}\n"
+                       f"📅 Дата создания: {backup_data['backup_date']}"
+            )
+        
+        # Удаляем временный файл
+        os.remove(filename)
+        
+        await send_to_log_chat(context, f"Создана резервная копия: {backup_data['stats']['total_records']} записей")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка экспорта: {e}")
+
+# === Команда показа последних записей ===
+
+async def recent_command(update: Update, context: CallbackContext):
+    """Показывает последние записи"""
+    try:
+        from database import get_all_records
+        
+        # Получаем количество записей из аргументов или по умолчанию 5
+        args = context.args
+        limit = 5
+        if args:
+            try:
+                limit = min(int(args[0]), 20)  # Максимум 20 записей
+            except ValueError:
+                pass
+        
+        records = get_all_records(limit=limit)
+        
+        if not records:
+            await update.message.reply_text("📝 Записей в базе данных нет.")
+            return
+        
+        result_text = f"📝 Последние {len(records)} записей:\n\n"
+        
+        for i, record in enumerate(records, 1):
+            result_text += f"{i}. ID: <code>{record['id']}</code>\n"
+            result_text += f"   📅 {record['date']} | 💰 {record['amount']:,.2f}\n"
+            result_text += f"   🏪 {record['supplier']}\n"
+            result_text += f"   🧭 {record['direction']}\n"
+            result_text += f"   📝 {record['description']}\n\n"
+        
+        await update.message.reply_text(result_text, parse_mode="HTML")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка получения записей: {e}")
+
+# === Команда информации о записи ===
+
+async def info_command(update: Update, context: CallbackContext):
+    """Показывает детальную информацию о записи по ID"""
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "ℹ️ Информация о записи:\n"
+            "Используйте: <code>/info [ID записи]</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    record_id = args[0].strip()
+    
+    try:
+        record = get_record_from_db(record_id)
+        
+        if not record:
+            await update.message.reply_text(
+                f"❌ Запись с ID <code>{record_id}</code> не найдена.",
+                parse_mode="HTML"
+            )
+            return
+        
+        result_text = "ℹ️ Детальная информация о записи:\n\n"
+        result_text += format_record_info(record)
+        result_text += f"\n\n📅 Создана: {record.get('created_at', 'N/A')}"
+        result_text += f"\n🔄 Обновлена: {record.get('updated_at', 'N/A')}"
+        
+        # Создаем кнопку редактирования
+        keyboard = [[InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit_record_{record_id}")]]
+        
+        await update.message.reply_text(
+            result_text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка получения информации: {e}")
+
+# === Команда помощи ===
+
+async def help_command(update: Update, context: CallbackContext):
+    """Показывает справку по командам"""
+    help_text = """
+📖 **Справка по командам:**
+
+**Основные команды:**
+/start - запуск бота и основное меню
+/menu - показать главное меню
+/help - эта справка
+
+**Управление записями:**
+/recent [N] - показать последние N записей (по умолчанию 5)
+/search [текст] - поиск записей по тексту
+/info [ID] - детальная информация о записи
+
+**Команды администратора:**
+/set_sheet [ID] - подключить Google Spreadsheet
+/set_log - установить текущий чат как лог-чат
+/export - экспорт базы данных в JSON
+
+**Работа с записями через меню:**
+• ➕ Добавить запись - пошаговое добавление новой записи
+• 📋 Выбрать лист - выбор активного листа в таблице
+• 📊 Статус - текущие настройки бота
+• 📈 Статистика - статистика базы данных
+
+**Поля записи:**
+• ամսաթիվ (дата) - дата в формате YYYY-MM-DD
+• մատակարար (поставщик) - название поставщика
+• ուղղություն (направление) - направление расхода
+• ծախսի բնութագիր (описание) - описание расхода
+• Արժեք (сумма) - сумма расхода
+
+**Примеры использования:**
+/recent 10 - показать последние 10 записей
+/search продукты - найти записи со словом "продукты"
+/info abc12345 - информация о записи с ID "abc12345"
+
+Все записи автоматически синхронизируются между Telegram, Google Sheets и базой данных.
+"""
+    
+    await update.message.reply_text(help_text, parse_mode="Markdown")
+
+# === Настройка приложения ===
+
+def main():
+    """Основная функция запуска бота"""
+    try:
+        # Инициализация базы данных
+        if not init_db():
+            logger.error("Не удалось инициализировать базу данных!")
+            return
+        
+        # Создание приложения
+        application = Application.builder().token(TOKEN).build()
+        
+        # Настройка ConversationHandler для добавления записей
+        add_record_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(start_add_record, pattern="^add_record$")],
+            states={
+                DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)],
+                SUPPLIER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_supplier)],
+                DIRECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_direction)],
+                DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_description)],
+                AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_amount)],
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+        )
+        
+        # Настройка ConversationHandler для редактирования записей
+        edit_record_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(button_handler, pattern="^edit_")],
+            states={
+                EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_edit_value)],
+            },
+            fallbacks=[
+                CommandHandler("cancel", cancel),
+                CallbackQueryHandler(button_handler, pattern="^cancel_edit$")
+            ],
+        )
+        
+        # Регистрация обработчиков команд
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("menu", menu_command))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("set_log", set_log_command))
+        application.add_handler(CommandHandler("set_sheet", set_sheet_command))
+        application.add_handler(CommandHandler("search", search_command))
+        application.add_handler(CommandHandler("export", export_command))
+        application.add_handler(CommandHandler("recent", recent_command))
+        application.add_handler(CommandHandler("info", info_command))
+        
+        # Регистрация ConversationHandler'ов
+        application.add_handler(add_record_conv)
+        application.add_handler(edit_record_conv)
+        
+        # Регистрация обработчика кнопок (должен быть после ConversationHandler'ов)
+        application.add_handler(CallbackQueryHandler(button_handler))
+        
+        # Регистрация обработчика ошибок
+        application.add_error_handler(error_handler)
+        
+        # Запуск бота
+        logger.info("🚀 Бот запущен!")
+        print("🚀 Бот запущен! Нажмите Ctrl+C для остановки.")
+        
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        
+    except Exception as e:
+        logger.error(f"Критическая ошибка при запуске бота: {e}")
+        print(f"❌ Критическая ошибка: {e}")
+
+if __name__ == '__main__':
+    main()
