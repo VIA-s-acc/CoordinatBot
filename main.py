@@ -1,16 +1,20 @@
 import json
 import logging
+import os
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters, CallbackContext
 from google_connector import get_worksheets_info, add_record_to_sheet, update_record_in_sheet, delete_record_from_sheet, get_record_by_id
-from database import init_db, add_record_to_db, update_record_in_db, delete_record_from_db, get_record_from_db
+from database import init_db, add_record_to_db, update_record_in_db, delete_record_from_db, get_record_from_db, get_db_stats
 import uuid
 
 # === Конфигурация ===
 from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv('TOKEN')
+if not TOKEN:
+    raise ValueError("TOKEN не найден в переменных окружения! Добавьте его в .env файл")
+
 CONFIG_FILE = 'config.json'
 ADMIN_IDS = [714158870]  # Добавьте ID администраторов
 
@@ -76,7 +80,8 @@ def create_main_menu():
     keyboard = [
         [InlineKeyboardButton("➕ Добавить запись", callback_data="add_record")],
         [InlineKeyboardButton("📋 Выбрать лист", callback_data="select_sheet")],
-        [InlineKeyboardButton("📊 Статус", callback_data="status")]
+        [InlineKeyboardButton("📊 Статус", callback_data="status")],
+        [InlineKeyboardButton("📈 Статистика", callback_data="stats")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -105,7 +110,8 @@ async def start(update: Update, context: CallbackContext):
         "• 📝 Логирование действий\n\n"
         "Команды:\n"
         "/menu - основное меню\n"
-        "/set_log - установить лог-чат (только админы)",
+        "/set_log - установить лог-чат (только админы)\n"
+        "/set_sheet - установить Google Sheet ID",
         reply_markup=create_main_menu()
     )
 
@@ -131,6 +137,58 @@ async def set_log_command(update: Update, context: CallbackContext):
     )
     await send_to_log_chat(context, f"Лог-чат активирован. Chat ID: {chat_id}")
 
+async def set_sheet_command(update: Update, context: CallbackContext):
+    """Команда для установки ID Google Spreadsheet"""
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS and len(ADMIN_IDS) > 0:
+        await update.message.reply_text("❌ У вас нет прав для выполнения этой команды.")
+        return
+    
+    # Получаем аргументы команды
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "📊 Для установки Google Spreadsheet используйте:\n"
+            "<code>/set_sheet YOUR_SPREADSHEET_ID</code>\n\n"
+            "ID можно найти в URL таблицы:\n"
+            "https://docs.google.com/spreadsheets/d/<b>SPREADSHEET_ID</b>/edit",
+            parse_mode="HTML"
+        )
+        return
+    
+    spreadsheet_id = args[0].strip()
+    
+    # Проверяем доступность таблицы
+    try:
+        sheets_info, spreadsheet_title = get_worksheets_info(spreadsheet_id)
+        if not sheets_info:
+            await update.message.reply_text("❌ Не удалось получить доступ к таблице. Проверьте ID и права доступа.")
+            return
+        
+        # Сохраняем ID таблицы
+        set_active_spreadsheet(spreadsheet_id)
+        
+        await update.message.reply_text(
+            f"✅ Google Spreadsheet подключена!\n"
+            f"📊 Название: <b>{spreadsheet_title}</b>\n"
+            f"🆔 ID: <code>{spreadsheet_id}</code>\n"
+            f"📋 Найдено листов: {len(sheets_info)}\n\n"
+            f"Теперь выберите лист для работы через /menu → 📋 Выбрать лист",
+            parse_mode="HTML"
+        )
+        
+        await send_to_log_chat(context, f"Подключена Google Spreadsheet: {spreadsheet_title} (ID: {spreadsheet_id})")
+        
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ Ошибка подключения к таблице:\n<code>{str(e)}</code>\n\n"
+            f"Убедитесь, что:\n"
+            f"• ID таблицы корректный\n"
+            f"• Сервисный аккаунт имеет доступ к таблице\n"
+            f"• Файл credentials корректный",
+            parse_mode="HTML"
+        )
+
 # === Обработчики кнопок ===
 
 async def button_handler(update: Update, context: CallbackContext):
@@ -145,13 +203,21 @@ async def button_handler(update: Update, context: CallbackContext):
         return await select_sheet_menu(update, context)
     elif data == "status":
         return await show_status(update, context)
+    elif data == "stats":
+        return await show_stats(update, context)
+    elif data.startswith("sheet_"):
+        return await select_sheet(update, context)
     elif data.startswith("edit_"):
         return await handle_edit_button(update, context)
     elif data.startswith("delete_"):
         return await handle_delete_button(update, context)
+    elif data.startswith("confirm_delete_"):
+        return await confirm_delete(update, context)
     elif data == "cancel_edit":
         await query.edit_message_text("❌ Редактирование отменено.")
         return ConversationHandler.END
+    elif data == "back_to_menu":
+        await query.edit_message_text("📋 Главное меню:", reply_markup=create_main_menu())
 
 async def show_status(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -164,7 +230,7 @@ async def show_status(update: Update, context: CallbackContext):
     status_text = "📊 Текущий статус:\n\n"
     
     if spreadsheet_id:
-        status_text += f"✅ Подключена таблица: <code>{spreadsheet_id}</code>\n"
+        status_text += f"✅ Подключена таблица: <code>{spreadsheet_id[:10]}...</code>\n"
         if sheet_name:
             status_text += f"📋 Активный лист: <code>{sheet_name}</code>\n"
         else:
@@ -177,21 +243,59 @@ async def show_status(update: Update, context: CallbackContext):
     else:
         status_text += "📝 Лог-чат не установлен\n"
     
-    await query.edit_message_text(status_text, parse_mode="HTML")
+    # Добавляем кнопку "Назад"
+    keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]]
+    
+    await query.edit_message_text(
+        status_text, 
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def show_stats(update: Update, context: CallbackContext):
+    """Показывает статистику базы данных"""
+    query = update.callback_query
+    
+    stats = get_db_stats()
+    if stats:
+        stats_text = (
+            f"📈 Статистика базы данных:\n\n"
+            f"📝 Всего записей: {stats['total_records']}\n"
+            f"💰 Общая сумма: {stats['total_amount']:,.2f}\n"
+            f"📅 За последние 30 дней: {stats['recent_records']} записей"
+        )
+    else:
+        stats_text = "❌ Ошибка получения статистики"
+    
+    keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]]
+    
+    await query.edit_message_text(
+        stats_text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def select_sheet_menu(update: Update, context: CallbackContext):
     query = update.callback_query
     
     spreadsheet_id = get_active_spreadsheet_id()
     if not spreadsheet_id:
-        await query.edit_message_text("❌ Сначала нужно подключить таблицу.")
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]]
+        await query.edit_message_text(
+            "❌ Сначала нужно подключить таблицу.\n"
+            "Используйте команду /set_sheet",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return
     
     try:
         sheets_info, spreadsheet_title = get_worksheets_info(spreadsheet_id)
         
         if not sheets_info:
-            await query.edit_message_text("❌ В таблице нет листов.")
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]]
+            await query.edit_message_text(
+                "❌ В таблице нет листов.",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return
         
         keyboard = []
@@ -210,7 +314,29 @@ async def select_sheet_menu(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        await query.edit_message_text(f"⚠️ Ошибка: {e}")
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]]
+        await query.edit_message_text(
+            f"⚠️ Ошибка: {e}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def select_sheet(update: Update, context: CallbackContext):
+    """Выбирает активный лист"""
+    query = update.callback_query
+    sheet_name = query.data.replace("sheet_", "")
+    
+    # Сохраняем выбранный лист
+    spreadsheet_id = get_active_spreadsheet_id()
+    set_active_spreadsheet(spreadsheet_id, sheet_name)
+    
+    await query.edit_message_text(
+        f"✅ Выбран лист: <b>{sheet_name}</b>\n\n"
+        f"Теперь вы можете добавлять записи!",
+        parse_mode="HTML",
+        reply_markup=create_main_menu()
+    )
+    
+    await send_to_log_chat(context, f"Выбран активный лист: {sheet_name}")
 
 # === Добавление записи ===
 
@@ -219,7 +345,12 @@ async def start_add_record(update: Update, context: CallbackContext):
     
     # Проверяем настройки
     if not get_active_spreadsheet_id() or not get_active_sheet_name():
-        await query.edit_message_text("❌ Сначала нужно выбрать лист для работы.")
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]]
+        await query.edit_message_text(
+            "❌ Сначала нужно выбрать лист для работы.\n"
+            "Используйте 📋 Выбрать лист",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return ConversationHandler.END
     
     # Генерируем ID и устанавливаем текущую дату
@@ -338,117 +469,4 @@ async def get_amount(update: Update, context: CallbackContext):
             status = "❌ Ошибка при сохранении записи!"
             log_message = f"Ошибка сохранения записи ID: {record['id']}"
         
-        # Отправляем результат с кнопкой редактирования
-        keyboard = [[InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit_record_{record['id']}")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        result_message = (
-            f"{status}\n\n"
-            f"📋 Детали записи:\n"
-            f"🆔 ID: <code>{record['id']}</code>\n"
-            f"📅 Дата: {record['date']}\n"
-            f"🏪 Поставщик: {record['supplier']}\n"
-            f"🧭 Направление: {record['direction']}\n"
-            f"📝 Описание: {record['description']}\n"
-            f"💰 Сумма: {record['amount']}"
-        )
-        
-        await update.message.reply_text(
-            result_message,
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
-        
-        # Логируем действие
-        await send_to_log_chat(context, log_message)
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка при сохранении: {e}")
-        await send_to_log_chat(context, f"Ошибка сохранения записи: {e}")
-    
-    # Очищаем данные пользователя
-    context.user_data.clear()
-    return ConversationHandler.END
-
-# === Редактирование записей ===
-
-async def handle_edit_button(update: Update, context: CallbackContext):
-    query = update.callback_query
-    data = query.data
-    
-    if data.startswith("edit_record_"):
-        record_id = data.replace("edit_record_", "")
-        context.user_data['editing_record_id'] = record_id
-        
-        # Получаем текущие данные записи
-        record = get_record_from_db(record_id)
-        if not record:
-            await query.edit_message_text("❌ Запись не найдена.")
-            return
-        
-        record_info = (
-            f"✏️ Редактирование записи <code>{record_id}</code>\n\n"
-            f"📅 Дата: {record.get('date', 'N/A')}\n"
-            f"🏪 Поставщик: {record.get('supplier', 'N/A')}\n"
-            f"🧭 Направление: {record.get('direction', 'N/A')}\n"
-            f"📝 Описание: {record.get('description', 'N/A')}\n"
-            f"💰 Сумма: {record.get('amount', 'N/A')}\n\n"
-            f"Выберите поле для редактирования:"
-        )
-        
-        await query.edit_message_text(
-            record_info,
-            reply_markup=create_edit_menu(record_id),
-            parse_mode="HTML"
-        )
-
-async def handle_delete_button(update: Update, context: CallbackContext):
-    query = update.callback_query
-    record_id = query.data.replace("delete_", "")
-    
-    keyboard = [
-        [InlineKeyboardButton("✅ Да, удалить", callback_data=f"confirm_delete_{record_id}")],
-        [InlineKeyboardButton("❌ Отмена", callback_data=f"edit_record_{record_id}")]
-    ]
-    
-    await query.edit_message_text(
-        f"🗑 Удалить запись <code>{record_id}</code>?\n"
-        f"Это действие нельзя отменить!",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="HTML"
-    )
-
-# === Основная функция ===
-
-def main():
-    # Инициализируем базу данных
-    init_db()
-    
-    # Создаем приложение
-    app = Application.builder().token(TOKEN).build()
-    
-    # Обработчик добавления записей
-    add_record_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(start_add_record, pattern="^add_record$")],
-        states={
-            DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)],
-            SUPPLIER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_supplier)],
-            DIRECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_direction)],
-            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_description)],
-            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_amount)]
-        },
-        fallbacks=[CommandHandler('cancel', lambda u, c: ConversationHandler.END)]
-    )
-    
-    # Добавляем обработчики
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", menu_command))
-    app.add_handler(CommandHandler("set_log", set_log_command))
-    app.add_handler(add_record_handler)
-    app.add_handler(CallbackQueryHandler(button_handler))
-    
-    print("🤖 Бот запущен!")
-    app.run_polling()
-
-if __name__ == '__main__':
-    main()
+        # Отправляем результат с кнопкой ред
