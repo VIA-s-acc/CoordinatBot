@@ -444,4 +444,217 @@ async def get_description(update: Update, context: CallbackContext):
     
     return AMOUNT
 
-async
+async def get_amount(update: Update, context: CallbackContext):
+    amount_input = update.message.text.strip()
+    
+    try:
+        amount = float(amount_input)
+        context.user_data['record']['amount'] = amount
+        
+        # Получаем полную запись
+        record = context.user_data['record']
+        
+        # Сохраняем в базу данных
+        db_success = add_record_to_db(record)
+        
+        # Сохраняем в Google Sheets
+        spreadsheet_id = get_active_spreadsheet_id()
+        sheet_name = get_active_sheet_name()
+        sheet_success = add_record_to_sheet(spreadsheet_id, sheet_name, record)
+        
+        # Форматируем результат
+        result_text = "✅ Запись добавлена!\n\n"
+        result_text += format_record_info(record)
+        result_text += "\n\n"
+        
+        if db_success and sheet_success:
+            result_text += "✅ Сохранено в БД и Google Sheets"
+        elif db_success:
+            result_text += "✅ Сохранено в БД\n⚠️ Ошибка сохранения в Google Sheets"
+        elif sheet_success:
+            result_text += "⚠️ Ошибка сохранения в БД\n✅ Сохранено в Google Sheets"
+        else:
+            result_text += "❌ Ошибка сохранения в БД и Google Sheets"
+        
+        # Создаем кнопку редактирования
+        keyboard = [[InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit_record_{record['id']}")]]
+        
+        await update.message.reply_text(
+            result_text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        # Отправляем в лог-чат
+        await send_to_log_chat(context, f"Добавлена новая запись ID: {record['id']}, сумма: {amount}")
+        
+        # Очищаем данные пользователя
+        context.user_data.clear()
+        
+        return ConversationHandler.END
+        
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Неверный формат суммы. Введите число (например: 1000 или 1000.50):"
+        )
+        return AMOUNT
+
+# === Редактирование записей ===
+
+async def handle_edit_button(update: Update, context: CallbackContext):
+    """Обрабатывает нажатие кнопок редактирования"""
+    query = update.callback_query
+    data = query.data
+    
+    if data.startswith("edit_record_"):
+        # Показываем меню редактирования
+        record_id = data.replace("edit_record_", "")
+        return await show_edit_menu(update, context, record_id)
+    
+    # Обрабатываем редактирование конкретных полей
+    parts = data.split("_")
+    if len(parts) >= 3:
+        field = parts[1]
+        record_id = "_".join(parts[2:])
+        
+        context.user_data['edit_record_id'] = record_id
+        context.user_data['edit_field'] = field
+        
+        field_names = {
+            'date': 'дату (YYYY-MM-DD)',
+            'supplier': 'поставщика',
+            'direction': 'направление',
+            'description': 'описание',
+            'amount': 'сумму'
+        }
+        
+        await query.edit_message_text(
+            f"✏️ Редактирование записи ID: <code>{record_id}</code>\n\n"
+            f"Введите новое значение для поля '{field_names.get(field, field)}':",
+            parse_mode="HTML"
+        )
+        
+        return EDIT_VALUE
+
+async def show_edit_menu(update: Update, context: CallbackContext, record_id: str):
+    """Показывает меню редактирования записи"""
+    query = update.callback_query
+    
+    # Получаем запись из базы данных
+    record = get_record_from_db(record_id)
+    if not record:
+        await query.edit_message_text("❌ Запись не найдена.")
+        return ConversationHandler.END
+    
+    text = "✏️ Редактирование записи:\n\n"
+    text += format_record_info(record)
+    text += "\n\nВыберите поле для редактирования:"
+    
+    await query.edit_message_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=create_edit_menu(record_id)
+    )
+
+async def get_edit_value(update: Update, context: CallbackContext):
+    """Получает новое значение для редактируемого поля"""
+    new_value = update.message.text.strip()
+    record_id = context.user_data.get('edit_record_id')
+    field = context.user_data.get('edit_field')
+    
+    if not record_id or not field:
+        await update.message.reply_text("❌ Ошибка редактирования.")
+        return ConversationHandler.END
+    
+    # Валидация данных
+    if field == 'date':
+        try:
+            datetime.strptime(new_value, "%Y-%m-%d")
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Неверный формат даты. Используйте YYYY-MM-DD."
+            )
+            return EDIT_VALUE
+    elif field == 'amount':
+        try:
+            new_value = float(new_value)
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Неверный формат суммы. Введите число."
+            )
+            return EDIT_VALUE
+    
+    # Обновляем в базе данных
+    db_success = update_record_in_db(record_id, field, new_value)
+    
+    # Обновляем в Google Sheets
+    spreadsheet_id = get_active_spreadsheet_id()
+    sheet_name = get_active_sheet_name()
+    sheet_success = update_record_in_sheet(spreadsheet_id, sheet_name, record_id, field, new_value)
+    
+    # Результат
+    if db_success and sheet_success:
+        result_text = f"✅ Поле '{field}' обновлено на '{new_value}'"
+    elif db_success:
+        result_text = f"✅ Поле '{field}' обновлено в БД\n⚠️ Ошибка обновления в Google Sheets"
+    elif sheet_success:
+        result_text = f"⚠️ Ошибка обновления в БД\n✅ Поле '{field}' обновлено в Google Sheets"
+    else:
+        result_text = f"❌ Ошибка обновления поля '{field}'"
+    
+    await update.message.reply_text(result_text)
+    
+    # Отправляем в лог-чат
+    await send_to_log_chat(context, f"Обновлена запись ID: {record_id}, поле: {field}, новое значение: {new_value}")
+    
+    # Очищаем данные пользователя
+    context.user_data.clear()
+    
+    return ConversationHandler.END
+
+# === Удаление записей ===
+
+async def handle_delete_button(update: Update, context: CallbackContext):
+    """Обрабатывает нажатие кнопки удаления"""
+    query = update.callback_query
+    record_id = query.data.replace("delete_", "")
+    
+    # Получаем информацию о записи
+    record = get_record_from_db(record_id)
+    if not record:
+        await query.edit_message_text("❌ Запись не найдена.")
+        return ConversationHandler.END
+    
+    text = "🗑 Подтверждение удаления:\n\n"
+    text += format_record_info(record)
+    text += "\n\n⚠️ Это действие нельзя отменить!"
+    
+    keyboard = [
+        [InlineKeyboardButton("🗑 Да, удалить", callback_data=f"confirm_delete_{record_id}")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_edit")]
+    ]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def confirm_delete(update: Update, context: CallbackContext):
+    """Подтверждает удаление записи"""
+    query = update.callback_query
+    record_id = query.data.replace("confirm_delete_", "")
+    
+    # Удаляем из базы данных
+    db_success = delete_record_from_db(record_id)
+    
+    # Удаляем из Google Sheets
+    spreadsheet_id = get_active_spreadsheet_id()
+    sheet_name = get_active_sheet_name()
+    sheet_success = delete_record_from_sheet(spreadsheet_id, sheet_name, record_id)
+    
+    # Результат
+    if db_success and sheet_success:
+        result_text = f"✅ Запись ID: <code>{record_id}</code> удалена"
+    elif db_success:
+        result_text = f"✅
