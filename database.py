@@ -13,8 +13,7 @@ def init_db():
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
-        # Создаем таблицу записей
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS records (
                 id TEXT PRIMARY KEY,
@@ -23,46 +22,54 @@ def init_db():
                 direction TEXT NOT NULL,
                 description TEXT NOT NULL,
                 amount REAL NOT NULL,
+                spreadsheet_id TEXT,
+                sheet_name TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         conn.commit()
         conn.close()
         logger.info("База данных инициализирована успешно")
         return True
-        
+
     except Exception as e:
         logger.error(f"Ошибка инициализации базы данных: {e}")
         return False
+
 
 def add_record_to_db(record: Dict) -> bool:
     """Добавляет запись в базу данных"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
+
         cursor.execute('''
-            INSERT INTO records (id, date, supplier, direction, description, amount)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO records (
+                id, date, supplier, direction, description, amount,
+                spreadsheet_id, sheet_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             record.get('id'),
             record.get('date'),
             record.get('supplier'),
             record.get('direction'),
             record.get('description'),
-            record.get('amount', 0)
+            record.get('amount', 0),
+            record.get('spreadsheet_id'),
+            record.get('sheet_name')
         ))
-        
+
         conn.commit()
         conn.close()
         logger.info(f"Запись {record.get('id')} добавлена в БД")
         return True
-        
+
     except Exception as e:
         logger.error(f"Ошибка добавления записи в БД: {e}")
         return False
+
 
 def update_record_in_db(record_id: str, field: str, new_value) -> bool:
     """Обновляет запись в базе данных"""
@@ -121,15 +128,16 @@ def get_record_from_db(record_id: str) -> Optional[Dict]:
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
+
         cursor.execute('''
-            SELECT id, date, supplier, direction, description, amount, created_at, updated_at
+            SELECT id, date, supplier, direction, description, amount,
+                   spreadsheet_id, sheet_name, created_at, updated_at
             FROM records WHERE id = ?
         ''', (record_id,))
-        
+
         row = cursor.fetchone()
         conn.close()
-        
+
         if row:
             return {
                 'id': row[0],
@@ -138,15 +146,18 @@ def get_record_from_db(record_id: str) -> Optional[Dict]:
                 'direction': row[3],
                 'description': row[4],
                 'amount': row[5],
-                'created_at': row[6],
-                'updated_at': row[7]
+                'spreadsheet_id': row[6],
+                'sheet_name': row[7],
+                'created_at': row[8],
+                'updated_at': row[9]
             }
-        
+
         return None
-        
+
     except Exception as e:
         logger.error(f"Ошибка получения записи из БД: {e}")
         return None
+
 
 def get_db_stats() -> Optional[Dict]:
     """Получает статистику базы данных"""
@@ -179,14 +190,14 @@ def get_db_stats() -> Optional[Dict]:
         logger.error(f"Ошибка получения статистики БД: {e}")
         return None
 
-def get_all_records(limit: int = 100) -> List[Dict]:
+def get_all_records(limit: int = 1000000) -> List[Dict]:
     """Получает все записи из базы данных"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, date, supplier, direction, description, amount, created_at, updated_at
+            SELECT id, date, supplier, direction, description, amount, created_at, updated_at, spreadsheet_id, sheet_name
             FROM records 
             ORDER BY created_at DESC 
             LIMIT ?
@@ -205,7 +216,9 @@ def get_all_records(limit: int = 100) -> List[Dict]:
                 'description': row[4],
                 'amount': row[5],
                 'created_at': row[6],
-                'updated_at': row[7]
+                'updated_at': row[7],
+                'spreadsheet_id': row[8],
+                'sheet_name': row[9]
             })
         
         return records
@@ -215,17 +228,23 @@ def get_all_records(limit: int = 100) -> List[Dict]:
         return []
 
 def search_records(query: str, limit: int = 50) -> List[Dict]:
-    """Поиск записей по тексту"""
+    """
+    Поиск записей по тексту (supplier, direction, description)
+    с сортировкой по полю 'date' (в порядке убывания)
+    """
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
         search_query = f"%{query}%"
         cursor.execute('''
-            SELECT id, date, supplier, direction, description, amount, created_at, updated_at
+            SELECT id, date, supplier, direction, description, amount, created_at, updated_at, spreadsheet_id, sheet_name
             FROM records 
             WHERE supplier LIKE ? OR direction LIKE ? OR description LIKE ?
-            ORDER BY created_at DESC 
+            ORDER BY
+                CAST('20' || substr(date, -2) AS INTEGER) DESC,  -- год
+                CAST(substr(date, instr(date, '.') + 1, 2) AS INTEGER) DESC,  -- месяц
+                CAST(substr(date, 1, instr(date, '.') - 1) AS INTEGER) DESC  -- день
             LIMIT ?
         ''', (search_query, search_query, search_query, limit))
         
@@ -242,19 +261,22 @@ def search_records(query: str, limit: int = 50) -> List[Dict]:
                 'description': row[4],
                 'amount': row[5],
                 'created_at': row[6],
-                'updated_at': row[7]
+                'updated_at': row[7],
+                'spreadsheet_id': row[8],
+                'sheet_name': row[9]
             })
         
         return records
-        
+
     except Exception as e:
         logger.error(f"Ошибка поиска записей в БД: {e}")
         return []
 
+
 def backup_db_to_dict() -> Optional[Dict]:
     """Создает резервную копию базы данных в виде словаря"""
     try:
-        records = get_all_records(limit=10000)  # Получаем все записи
+        records = get_all_records(limit=100000)  # Получаем все записи
         stats = get_db_stats()
         
         return {
