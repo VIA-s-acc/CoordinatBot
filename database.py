@@ -235,18 +235,21 @@ def search_records(query: str, limit: int = 50) -> List[Dict]:
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
-        search_query = f"%{query}%"
+        if query.isdigit():
+            search_query = float(query)
+        else:
+            search_query = f"%{query}%"
+
         cursor.execute('''
             SELECT id, date, supplier, direction, description, amount, created_at, updated_at, spreadsheet_id, sheet_name
             FROM records 
-            WHERE supplier LIKE ? OR direction LIKE ? OR description LIKE ?
+            WHERE supplier LIKE ? OR direction LIKE ? OR description LIKE ? OR amount LIKE ?
             ORDER BY
                 CAST('20' || substr(date, -2) AS INTEGER) DESC,  -- год
                 CAST(substr(date, instr(date, '.') + 1, 2) AS INTEGER) DESC,  -- месяц
                 CAST(substr(date, 1, instr(date, '.') - 1) AS INTEGER) DESC  -- день
             LIMIT ?
-        ''', (search_query, search_query, search_query, limit))
+        ''', (search_query, search_query, search_query, search_query, limit))
         
         rows = cursor.fetchall()
         conn.close()

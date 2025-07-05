@@ -10,19 +10,19 @@ from google_connector import (get_worksheets_info, add_record_to_sheet,
 from database import init_db, add_record_to_db, update_record_in_db, delete_record_from_db, get_record_from_db, get_db_stats
 import uuid
 
-# === Конфигурация ===
+# === Конֆիգուրացիա ===
 from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv('TOKEN')
 if not TOKEN:
     raise ValueError("TOKEN-ը չի գտնվել: Ավելացրեք այն .env ֆայլում")
 
-# Файлы для хранения данных
+# Ֆայլեր տվյալների պահպանման համար
 USERS_FILE = 'users.json'
 ALLOWED_USERS_FILE = 'allowed_users.json'
 BOT_CONFIG_FILE = 'bot_config.json'
 
-# ID администраторов (могут добавлять новых пользователей)
+# ID ադմինիստրատորների (могут добавлять новых пользователей)
 ADMIN_IDS = [714158870]
 
 # Состояния для ConversationHandler
@@ -115,7 +115,7 @@ def update_user_settings(user_id: int, settings: dict):
     save_users(users)
 
 def load_allowed_users():
-    """Загружает список разрешенных пользователей"""
+    """Զանգռում է թույլատրված օգտվողների ցուցակը"""
     try:
         with open(ALLOWED_USERS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -123,7 +123,7 @@ def load_allowed_users():
         return []
 
 def save_allowed_users(allowed_list):
-    """Сохраняет список разрешенных пользователей"""
+    """Պահպանել թույլատրված օգտվողների ցուցակը"""
     with open(ALLOWED_USERS_FILE, 'w', encoding='utf-8') as f:
         json.dump(allowed_list, f, indent=2)
 
@@ -163,19 +163,31 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
         return
     
     user_name = user.get('display_name') or user.get('name') or f"User {user['id']}"
-    if action != "Խմբագրում":
+
+    if action == "Խմբագրում":
+        report_text = (
+            f"📢 🟥<b>ԽՄԲԱԳՐՈՒՄ</b> ID: <code> {record["id"]} </code>  🟥\n\n"
+            f"👤 Օգտագործող: <b>{user_name}</b> \n"
+            f"🔧 Գործողություն: <b>{action}</b>\n\n"
+        ) + format_record_info(record) + "\n\n" + \
+        f"📢 🟥<b>ԽՄԲԱԳՐՈՒՄ</b> ID: <code> {record["id"]} </code>  🟥"
+    elif action == "Բացթողում":
+        date = record.get('date', 'N/A')
+        report_text = (
+            f"📢 🟡<b>ԲԱՑԹՈՂՈՒՄ: {date} ամսաթվով</b>🟡\n\n"
+            f"👤 Օգտագործող: <b>{user_name}</b>\n"
+            f"🔧 Գործողություն: <b>{action}</b>\n\n"
+        ) + format_record_info(record) + "\n\n" + \
+        f"📢 🟡<b>ԲԱՑԹՈՂՈՒՄ: {date} ամսաթվով</b>🟡"
+
+    else:
         report_text = (
             f"📢 <b>ՎԵՐՋԻՆ ԳՈՐԾՈՂՈՒԹՅՈՒՆ</b>\n\n"
             f"👤 Օգտագործող: <b>{user_name}</b>\n"
             f"🔧 Գործողություն: <b>{action}</b>\n\n"
         ) + format_record_info(record)
-    else:
-        report_text = (
-            f"📢 🟥<b>ՎԵՐՋԻՆ ԳՈՐԾՈՂՈՒԹՅՈՒՆ</b> 🟥\n\n"
-            f"👤 Օգտագործող: <b>{user_name}</b> \n"
-            f"🔧 🟥 Գործողություն: <b>{action}</b>  🟥\n\n"
-        ) + format_record_info(record)
-    
+        
+        
     for chat_id, settings in report_chats.items():
         try:
             await context.bot.send_message(
@@ -189,11 +201,21 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
 def create_main_menu():
     """Создает основное меню бота"""
     keyboard = [
-        [InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record")],
+        [
+            InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record_menu")
+        ],
         [InlineKeyboardButton("📋 Ընտրել թերթիկ", callback_data="select_sheet")],
         [InlineKeyboardButton("📊 Կարգավիճակ", callback_data="status")],
         [InlineKeyboardButton("📈 Վիճակագրություն", callback_data="stats")],
         [InlineKeyboardButton("📊 Ընտրել աղյուսակ", callback_data="select_spreadsheet")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def create_add_record_menu():
+    keyboard = [
+        [InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record")],
+        [InlineKeyboardButton("➕ Ավելացնել Բացթողում", callback_data="add_skip_record")],
+        [InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -252,7 +274,9 @@ async def text_menu_handler(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     if not is_user_allowed(user_id):
         return
-    cancel(update, context)
+    
+    context.user_data.clear()
+    
     # Отправляем Inline-меню при нажатии на Reply-кнопку
     await update.message.reply_text(
         "📋 Հիմնական ընտրացանկ:",
@@ -449,6 +473,119 @@ async def set_sheet_command(update: Update, context: CallbackContext):
             parse_mode="HTML"
         )
 
+
+async def sync_sheets_command(update: Update, context: CallbackContext, used_by_admin: bool = False):
+    """Синхронизирует данные из Google Sheets в БД и приводит к формату бота"""
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS and used_by_admin is False:
+        
+        await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
+        return
+
+    user_settings = get_user_settings(user_id)
+    spreadsheet_id = user_settings.get('active_spreadsheet_id')
+    sheet_name = user_settings.get('active_sheet_name')
+    if not spreadsheet_id or not sheet_name:
+        if used_by_admin is False:
+            await update.message.reply_text("❌ Նախ պետք է ընտրել աղյուսակ և թերթիկ:")
+        return
+
+    from google_connector import get_worksheet_by_name
+    from database import get_record_from_db, add_record_to_db, update_record_in_db
+
+    worksheet = get_worksheet_by_name(spreadsheet_id, sheet_name)
+    if not worksheet:
+        if used_by_admin is False:
+            await update.message.reply_text("❌ Չհաջողվեց բացել թերթիկը:")
+        return
+
+    rows = worksheet.get_all_records()
+    added, updated = 0, 0
+    for row in rows:
+        # Приводим к формату бота
+        record_id = str(row.get('ID', '')).strip()
+        if not record_id:
+            continue  # пропускаем строки без ID
+
+        # Приведение даты к YYYY-MM-DD
+        raw_date = str(row.get('ամսաթիվ', '')).replace("․", ".").strip()
+        try:
+            if "." in raw_date:
+                date_obj = datetime.strptime(raw_date, "%d.%m.%y")
+                date_fmt = date_obj.strftime("%Y-%m-%d")
+            else:
+                date_fmt = raw_date
+        except Exception:
+            date_fmt = raw_date
+
+        # Приведение суммы к float
+        try:
+            amount = float(str(row.get('Արժեք', '0')).replace(',', '.').replace(' ', ''))
+        except Exception:
+            amount = 0.0
+
+        record = {
+            'id': record_id,
+            'date': date_fmt,
+            'supplier': str(row.get('մատակարար', '')).strip(),
+            'direction': str(row.get('ուղղություն', '')).strip(),
+            'description': str(row.get('ծախսի բնութագիր', '')).strip(),
+            'amount': amount,
+            'spreadsheet_id': spreadsheet_id,
+            'sheet_name': sheet_name
+        }
+
+        db_record = get_record_from_db(record_id)
+        if not db_record:
+            if add_record_to_db(record):
+                added += 1
+        else:
+            # Можно добавить сравнение и обновление, если хотите
+            updated += 1
+    if used_by_admin is False:
+        await update.message.reply_text(
+            f"✅ Սինխրոնիզացիա ավարտված է:\n"
+            f"Ավելացված է {added} նոր գրառում, {updated} արդեն կար:",
+            parse_mode="HTML"
+        )
+    
+async def start_add_skip_record(update: Update, context: CallbackContext):
+    query = update.callback_query
+    user_id = update.effective_user.id
+    if not is_user_allowed(user_id):
+        return
+
+
+    # Получаем настройки пользователя
+    user_settings = get_user_settings(user_id)
+
+    # Проверяем настройки
+    if not user_settings.get('active_spreadsheet_id') or not user_settings.get('active_sheet_name'):
+        keyboard = [[InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]]
+        await query.edit_message_text(
+            "❌ Նախ պետք է ընտրել թերթիկ աշխատելու համար:\n"
+            "Օգտագործեք 📋 Ընտրել թերթիկ",
+            reply_markup=InlineKeyboardMarkup(keyboard))
+        return ConversationHandler.END
+
+    # Генерируем ID
+    record_id = "cb-"+str(uuid.uuid4())[:8]
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    context.user_data['record'] = {
+        'id': record_id,
+        'date': current_date,  # по умолчанию текущая дата, но пользователь может выбрать другую
+        'user_id': user_id,
+        'skip_mode': True  # <--- Добавляем флаг для выделения в логах
+    }
+
+    # Просим ввести дату вручную или отправить "+" для текущей
+    await query.edit_message_text(
+        f"➕ Ավելացնել Բացթողում\n"
+        f"🆔 ID: <code>{record_id}</code>\n\n"
+        f"📅 Մուտքագրեք ամսաթիվը (YYYY-MM-DD) կամ ուղարկեք <b>+</b>՝ ընթացիկ ամսաթվի համար:",
+        parse_mode="HTML"
+    )
+    return DATE  # Переходим к состоянию DATE, как в обычном добавлении
 # === Обработчики кнопок ===
 
 async def button_handler(update: Update, context: CallbackContext):
@@ -460,9 +597,16 @@ async def button_handler(update: Update, context: CallbackContext):
         return
     
     data = query.data
-    
+    if data == "add_record_menu":
+        # Показываем выбор типа добавления
+        await query.edit_message_text(
+            "Ընտրեք գործողությունը՝",
+            reply_markup=create_add_record_menu()
+        )
     if data == "add_record":
         return await start_add_record(update, context)
+    elif data == "add_skip_record":
+        return await start_add_skip_record(update, context)
     elif data == "select_spreadsheet":
         return await select_spreadsheet_menu(update, context)
     elif data == "select_sheet":
@@ -640,7 +784,7 @@ async def select_sheet(update: Update, context: CallbackContext):
     await send_to_log_chat(context, f"Ընտրվել է ակտիվ թերթիկ: {sheet_name}")
 
 async def initialize_sheets_command(update: Update, context: CallbackContext):
-    """Команда инициализации всех Google Sheets — только для админов"""
+    """Команда инициализации всех Google Sheets — միայն ադմինների համար"""
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
@@ -660,8 +804,7 @@ async def start_add_record(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = update.effective_user.id
     if not is_user_allowed(user_id):
-        return
-    
+        return  
     # Получаем настройки пользователя
     user_settings = get_user_settings(user_id)
     
@@ -705,10 +848,11 @@ async def start_add_record(update: Update, context: CallbackContext):
     return SUPPLIER_CHOICE  # Пропускаем состояние DATE
 
 async def get_date(update: Update, context: CallbackContext):
+    print('get_date called')
+
     user_id = update.effective_user.id
     if not is_user_allowed(user_id):
         return ConversationHandler.END
-    
     date_input = update.message.text.strip()
     
     if date_input == '+':
@@ -864,16 +1008,15 @@ async def get_amount(update: Update, context: CallbackContext):
         sheet_success = add_record_to_sheet(spreadsheet_id, sheet_name, record)
 
         result_text = "✅ Գրառումն ավելացված է:\n\n"
-        result_text += format_record_info(record) + "\n\n"
 
         if db_success and sheet_success:
-            result_text += "✅ Сохранено в БД и Google Sheets"
+            result_text += "✅ Պահպանված է ՏԲ-ում և Google Sheets-ում"
         elif db_success:
-            result_text += "✅ Сохранено в БД\n⚠️ Ошибка сохранения в Google Sheets"
+            result_text += "✅ Պահպանված է ՏԲ-ում\n⚠️ Google Sheets-ում պահպանելու սխալ"
         elif sheet_success:
-            result_text += "⚠️ Ошибка сохранения в БД\n✅ Сохранено в Google Sheets"
+            result_text += "⚠️ ՏԲ-ում պահպանելու սխալ \n✅ Պահպանված է Google Sheets-ում"
         else:
-            result_text += "❌ Ошибка сохранения в БД и Google Sheets"
+            result_text += "❌ Պահպանելու սխալ ՏԲ-ում և Google Sheets-ում"
 
         
         if db_success or sheet_success:
@@ -888,6 +1031,9 @@ async def get_amount(update: Update, context: CallbackContext):
                 users_data[user_id_str]['reports'].append(record['id'])
                 save_users(users_data)
                 
+        result_text += "\n" + format_record_info(record) + "\n\n"
+
+           
         keyboard = [[InlineKeyboardButton("✏️ Խմբագրել", callback_data=f"edit_record_{record['id']}")]]
         await update.message.reply_text(result_text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -897,7 +1043,11 @@ async def get_amount(update: Update, context: CallbackContext):
             'name': update.effective_user.full_name,
             'display_name': user_settings.get('display_name')
         }
-        await send_report(context, "Ավելացում", record, user_info)
+        if record.get('skip_mode'):
+            action = "Բացթողում"
+        else:
+            action = "Ավելացում"
+        await send_report(context, action, record, user_info)
         
         context.user_data.clear()
 
@@ -995,6 +1145,8 @@ async def get_edit_value(update: Update, context: CallbackContext):
     if not is_user_allowed(user_id):
         return ConversationHandler.END
     
+    
+
     new_value = update.message.text.strip()
     record_id = context.user_data.get('edit_record_id')
     field = context.user_data.get('edit_field')
@@ -1036,9 +1188,10 @@ async def get_edit_value(update: Update, context: CallbackContext):
     # Обновляем в Google Sheets
     spreadsheet_id = record.get('spreadsheet_id')
     sheet_name = record.get('sheet_name')
+    await sync_sheets_command(update, context, used_by_admin=True)
     sheet_success = update_record_in_sheet(spreadsheet_id, sheet_name, record_id, field, new_value)
     
-     # Обновляем в базе данных
+    # Обновляем в базе данных
     db_success = update_record_in_db(record_id, field, new_value)
     # Результат
     if db_success and sheet_success:
@@ -1210,7 +1363,7 @@ async def search_command(update: Update, context: CallbackContext):
     if not args:
         await update.message.reply_text(
             "🔍 Գրառումների որոնում:\n"
-            "Օգտագործեք: <code>/search [текст для поиска]</code>\n\n"
+            "Օգտագործեք: <code>/search [տեքստի որոնում]</code>\n\n"
             "Որոնումն իրականացվում է հետևյալ դաշտերով՝ մատակարար, ուղղություն, նկարագրություն",
             parse_mode="HTML"
         )
@@ -1220,7 +1373,7 @@ async def search_command(update: Update, context: CallbackContext):
     
     try:
         from database import search_records
-        records = search_records(query, limit=25)
+        records = search_records(query)
         
         if not records:
             await update.message.reply_text(
@@ -1232,6 +1385,8 @@ async def search_command(update: Update, context: CallbackContext):
         result_text = f"🔍 Գտնվել է {len(records)} գրառում '{query}' հարցման համար:\n\n"
         
         for i, record in enumerate(records, 1):
+            if i > 25:
+                break
             result_text += f"{i}. ID: <code>{record['id']}</code>\n"
             result_text += f"   📅 {record['date']} | 💰 {record['amount']:,.2f}\n"
             result_text += f"   🏪 {record['supplier']}\n"
@@ -1290,7 +1445,7 @@ async def export_command(update: Update, context: CallbackContext):
     except Exception as e:
         await update.message.reply_text(f"❌ Արտահանման սխալ: {e}")
 
-# === Команда показа последних записей ===
+# === Команда показа վերջին записերի ===
 
 async def recent_command(update: Update, context: CallbackContext):
     """Показывает последние записи"""
@@ -1411,7 +1566,8 @@ async def help_command(update: Update, context: CallbackContext):
         "/allow_user [ID] – օգտագործողին ավելացնել թույլատրելի ցուցակում\n"
         "/disallow_user [ID] – օգտագործողին հեռացնել թույլատրելի ցուցակից\n"
         "/allowed_users – ցուցադրել թույլատրելի օգտագործողների ցուցակը\n"
-        "/set_user_name [ID] [անուն] – օգտագործողին անուն նշանակել\n\n"
+        "/set_user_name [ID] [անուն] – օգտագործողին անուն նշանակել\n"
+        "/sync_sheets – <b>սինխրոնիզացիա Google Sheets-ի հետ (ավելացված կամ փոփոխված գրառումները բերում է բոտի բազա և ձևաչափ)</b>\n\n"
 
         "<b>Գրառումների հետ աշխատանք ընտրացանկի միջոցով:</b>\n"
         "• ➕ Ավելացնել գրառում – նոր գրառման ավելացման քայլեր\n"
@@ -1568,7 +1724,7 @@ async def set_user_name_command(update: Update, context: CallbackContext):
     except ValueError:
         await update.message.reply_text("❌ Սխալ user_id ձևաչափ: Մուտքագրեք թիվ")
 
-# === Меню выбора таблицы ===
+# === Менյու ընտրության աղյուսակ ===
 
 async def select_spreadsheet_menu(update: Update, context: CallbackContext):
     """Показывает меню выбора Google Spreadsheet"""
@@ -1712,18 +1868,22 @@ def main():
         
         # Настройка ConversationHandler для добавления записей
         add_record_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(start_add_record, pattern="^add_record$")],
-        states={
-            SUPPLIER_CHOICE: [CallbackQueryHandler(button_handler, pattern="^(use_my_name|manual_input|use_firm_name)$")],
-            SUPPLIER_MANUAL: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_supplier_manual)],
-            DIRECTION: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_direction)],
-            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_description)],
-            AMOUNT: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_amount)],
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel),
-            MessageHandler(filters.Text(["📋 Մենյու"]), text_menu_handler)  # Добавляем fallback для меню
-        ],
+            entry_points=[
+                CallbackQueryHandler(start_add_record, pattern="^add_record$"),
+                CallbackQueryHandler(start_add_skip_record, pattern="^add_skip_record$"),  # <--- добавьте это!
+            ],
+            states={
+                DATE: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_date)],
+                SUPPLIER_CHOICE: [CallbackQueryHandler(button_handler, pattern="^(use_my_name|manual_input|use_firm_name)$")],
+                SUPPLIER_MANUAL: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_supplier_manual)],
+                DIRECTION: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_direction)],
+                DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_description)],
+                AMOUNT: [MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_amount)],
+            },
+            fallbacks=[
+                CommandHandler("cancel", cancel),
+                MessageHandler(filters.Text(["📋 Մենյու"]), text_menu_handler)  # Добавляем fallback для меню
+            ],
         )
         
         # Настройка ConversationHandler для редактирования записей
@@ -1755,6 +1915,7 @@ def main():
         application.add_handler(CommandHandler("disallow_user", disallow_user_command))
         application.add_handler(CommandHandler("allowed_users", allowed_users_command))
         application.add_handler(CommandHandler("set_user_name", set_user_name_command))
+        application.add_handler(CommandHandler("sync_sheets", sync_sheets_command))
         
         # Регистрация ConversationHandler'ов
         application.add_handler(add_record_conv)
@@ -1778,7 +1939,7 @@ def main():
         print(f"❌ Критическая ошибка: {e}")
 
 if __name__ == '__main__':
-    # Инициализация файлов, если они не существуют
+    # Ինքնուրույն ստուգում, թե արդյոք ֆայլերը գոյություն ունեն, եթե ոչ՝ ստեղծում է
     if not os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'w', encoding='utf-8') as f:
             json.dump({}, f)

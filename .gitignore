@@ -5,3 +5,6 @@ coordinate-462818-25b2ec4c500a.json
 coordinate-462818-8da128264452.json
 .env
 *.db
+allowed_users.json
+bot_config.json
+users.json
