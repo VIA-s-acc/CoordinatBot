@@ -29,6 +29,20 @@ def init_db():
             )
         ''')
 
+        # Добавлено: spreadsheet_id и sheet_name
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_display_name TEXT NOT NULL,
+                spreadsheet_id TEXT,
+                amount REAL NOT NULL,
+                date_from TEXT,
+                date_to TEXT,
+                comment TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         conn.commit()
         conn.close()
         logger.info("База данных инициализирована успешно")
@@ -208,6 +222,7 @@ def get_all_records(limit: int = 1000000) -> List[Dict]:
         
         records = []
         for row in rows:
+            
             records.append({
                 'id': row[0],
                 'date': row[1],
@@ -291,3 +306,45 @@ def backup_db_to_dict() -> Optional[Dict]:
     except Exception as e:
         logger.error(f"Ошибка создания резервной копии БД: {e}")
         return None
+
+def add_payment(user_display_name, spreadsheet_id, sheet_name, amount, date_from, date_to, comment):
+    """Добавляет выплату в базу данных"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO payments (user_display_name, spreadsheet_id, sheet_name, amount, date_from, date_to, comment)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_display_name, spreadsheet_id, None, amount, date_from, date_to, comment))
+        conn.commit()
+        conn.close()
+        logger.info(f"Выплата добавлена: {user_display_name}, {spreadsheet_id}, {sheet_name}, {amount}")
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка добавления выплаты: {e}")
+        return False
+
+def get_payments(user_display_name, spreadsheet_id=None, sheet_name=None):
+    """Получает все выплаты пользователя (по желанию по таблице и листу)"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        query = '''
+            SELECT amount, date_from, date_to, comment, created_at
+            FROM payments WHERE user_display_name = ?
+        '''
+        params = [user_display_name]
+        if spreadsheet_id:
+            query += " AND spreadsheet_id = ?"
+            params.append(spreadsheet_id)
+
+        query += " ORDER BY created_at"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        conn.close()
+        if len(rows) == 0:
+            return [(0, None, None, "Нет выплат", None)]
+        return rows
+    except Exception as e:
+        logger.error(f"Ошибка получения выплат: {e}")
+        return []

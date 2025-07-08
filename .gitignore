@@ -7,4 +7,26 @@ coordinate-462818-8da128264452.json
 *.db
 allowed_users.json
 bot_config.json
-users.json
+users.json# Environment variables
+# Data files
+data/*.db
+data/*.log
+# Credentials
+credentials/*.json
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+# Virtual environment
+venv/
+env/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+# OS
+.DS_Store
+Thumbs.db

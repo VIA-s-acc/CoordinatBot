@@ -1,14 +1,64 @@
 import json
 import logging
 import os
+from openpyxl import Workbook
+from io import BytesIO
+from database import get_payments, get_all_records
+import pandas as pd
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters, CallbackContext
 from google_connector import (get_worksheets_info, add_record_to_sheet, 
                             update_record_in_sheet, delete_record_from_sheet, 
-                            get_record_by_id, get_all_spreadsheets, get_spreadsheet_info, initialize_and_sync_sheets)
-from database import init_db, add_record_to_db, update_record_in_db, delete_record_from_db, get_record_from_db, get_db_stats
+                            get_record_by_id, get_all_spreadsheets, get_spreadsheet_info, initialize_and_sync_sheets, get_worksheet_by_name)
+from database import init_db, add_record_to_db, update_record_in_db, delete_record_from_db, get_record_from_db, get_db_stats, add_payment
 import uuid
+import re
+import re
+
+import re
+
+def normalize_date(date_str: str) -> str:
+    # Удалить пробелы и завершающие точки
+    date_str = date_str.strip().rstrip('.')
+
+    # Найти все группы цифр
+    parts = re.findall(r'\d+', date_str)
+
+    if len(parts) == 3:
+        # Например: ["08", "18", "23"]
+        day, month, year = parts
+    elif len(parts) == 1 and len(parts[0]) == 6:
+        # Например: "081823"
+        digits = parts[0]
+        day, month, year = digits[0:2], digits[2:4], digits[4:6]
+    elif len(parts) == 2 and len(parts[0]) == 2 and len(parts[1]) == 4:
+        # Например: "08.1823"
+        day = parts[0]
+        month = parts[1][:2]
+        year = parts[1][2:]
+    else:
+        raise ValueError(f"Unrecognized date format: {date_str}")
+
+    # Дополнить нулями
+    day = day.zfill(2)
+    month = month.zfill(2)
+    year = year.zfill(2)
+
+    # Попробуем интерпретировать и заодно проверим валидность
+    d, m = int(day), int(month)
+
+    # Если месяц > 12 и день <= 12 — вероятно, перепутано местами
+    if m > 12 and d <= 12:
+        day, month = month, day
+        d, m = int(day), int(month)
+
+    # Проверка после возможной перестановки
+    if not (1 <= d <= 31 and 1 <= m <= 12):
+        raise ValueError(f"Invalid calendar date: {day}.{month}.{year}")
+
+    return f"{day}.{month}.{year}"
+
 
 # === Конֆիգուրացիա ===
 from dotenv import load_dotenv
@@ -23,7 +73,7 @@ ALLOWED_USERS_FILE = 'allowed_users.json'
 BOT_CONFIG_FILE = 'bot_config.json'
 
 # ID ադմինիստրատորների (могут добавлять новых пользователей)
-ADMIN_IDS = [714158870]
+ADMIN_IDS = [714158870, 1023627246]
 
 # Состояния для ConversationHandler
 (DATE, SUPPLIER_CHOICE, SUPPLIER_MANUAL, DIRECTION, DESCRIPTION, AMOUNT, 
@@ -153,6 +203,65 @@ async def send_to_log_chat(context: CallbackContext, message: str):
             await context.bot.send_message(chat_id=log_chat_id, text=f"📝 ԳՐԱՆՑՄԱՏՅԱՆ: {message}")
         except Exception as e:
             logger.error(f"Սխալ գրանցամատյան ուղարկելիս: {e}")
+def merge_payment_intervals(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge overlapping or adjacent payment intervals summing amounts.
+
+    Args:
+        df: DataFrame with columns ['amount', 'date_from', 'date_to'].
+            date_from, date_to can be None or timestamps.
+
+    Returns:
+        DataFrame with merged intervals and summed amounts.
+        NaT is used instead of min/max timestamps for open intervals.
+    """
+    df = df.copy()
+    df['date_from'] = pd.to_datetime(df['date_from'], errors='coerce').fillna(pd.Timestamp.min)
+    df['date_to'] = pd.to_datetime(df['date_to'], errors='coerce').fillna(pd.Timestamp.max)
+    df = df.sort_values(by='date_from').reset_index(drop=True)
+
+    merged = []
+    current_from = df.loc[0, 'date_from']
+    current_to = df.loc[0, 'date_to']
+    current_amount = df.loc[0, 'amount']
+
+    for i in range(1, len(df)):
+        row = df.loc[i]
+        start = row['date_from']
+        end = row['date_to']
+        amt = row['amount']
+
+        # If intervals overlap or touch
+        if start <= current_to:
+            current_to = max(current_to, end)
+            current_amount += amt
+        else:
+            merged.append({
+                'date_from': current_from,
+                'date_to': current_to,
+                'amount': current_amount
+            })
+            current_from = start
+            current_to = end
+            current_amount = amt
+
+    merged.append({
+        'date_from': current_from,
+        'date_to': current_to,
+        'amount': current_amount
+    })
+
+    result = pd.DataFrame(merged)
+    # Replace extreme timestamps back to NaT to mark open intervals
+    result['date_from'] = result['date_from'].replace(pd.Timestamp.min, pd.NaT)
+    result['date_to'] = result['date_to'].replace(pd.Timestamp.max, pd.NaT)
+    return result
+
+
+def format_date_for_interval(d):
+    if pd.isna(d):
+        return '-'
+    return d.strftime('%Y-%m-%d')
 
 async def send_report(context: CallbackContext, action: str, record: dict, user: dict):
     """Отправляет отчет о действии в настроенные чаты"""
@@ -169,17 +278,14 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
             f"📢 🟥<b>ԽՄԲԱԳՐՈՒՄ</b> ID: <code> {record["id"]} </code>  🟥\n\n"
             f"👤 Օգտագործող: <b>{user_name}</b> \n"
             f"🔧 Գործողություն: <b>{action}</b>\n\n"
-        ) + format_record_info(record) + "\n\n" + \
-        f"📢 🟥<b>ԽՄԲԱԳՐՈՒՄ</b> ID: <code> {record["id"]} </code>  🟥"
+        ) + format_record_info(record) + "\n\n" 
     elif action == "Բացթողում":
         date = record.get('date', 'N/A')
         report_text = (
             f"📢 🟡<b>ԲԱՑԹՈՂՈՒՄ: {date} ամսաթվով</b>🟡\n\n"
             f"👤 Օգտագործող: <b>{user_name}</b>\n"
             f"🔧 Գործողություն: <b>{action}</b>\n\n"
-        ) + format_record_info(record) + "\n\n" + \
-        f"📢 🟡<b>ԲԱՑԹՈՂՈՒՄ: {date} ամսաթվով</b>🟡"
-
+        ) + format_record_info(record) + "\n\n" 
     else:
         report_text = (
             f"📢 <b>ՎԵՐՋԻՆ ԳՈՐԾՈՂՈՒԹՅՈՒՆ</b>\n\n"
@@ -198,17 +304,70 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
         except Exception as e:
             logger.error(f"Սխալ հաշվետվություն ուղարկելիս {chat_id}: {e}")
 
-def create_main_menu():
-    """Создает основное меню бота"""
+
+async def my_report_command(update: Update, context: CallbackContext):
+    """Показывает отчет пользователя по расходам за период"""
+    user_id = update.effective_user.id
+    if not is_user_allowed(user_id):
+        return
+
+    user_settings = get_user_settings(user_id)
+    display_name = user_settings.get('display_name')
+    if not display_name:
+        await update.message.reply_text("❌ Ձեր անունը չի սահմանված։")
+        return
+
+    args = context.args
+    date_from = args[0] if len(args) > 0 else None
+    date_to = args[1] if len(args) > 1 else None
+
+    from database import get_all_records
+
+    # Собираем все записи по имени пользователя
+    records = get_all_records()
+    filtered = []
+    for rec in records:
+        if str(rec.get('supplier', '')).strip() != display_name:
+            continue
+        rec_date = rec.get('date', '')
+        if date_from and rec_date < date_from:
+            continue
+        if date_to and rec_date > date_to:
+            continue
+        filtered.append(rec)
+
+    if not filtered:
+        await update.message.reply_text("Ձեր անունով գրառումներ չեն գտնվել նշված ժամանակահատվածում։")
+        return
+
+    # Группировка по листам
+    sheets = {}
+    total = 0
+    for rec in filtered:
+        sheet = rec.get('sheet_name', '—')
+        sheets.setdefault(sheet, []).append(rec)
+        total += rec.get('amount', 0)
+
+    text = f"🧾 <b>Ձեր ծախսերի հաշվետվությունը</b>\n"
+    if date_from or date_to:
+        text += f"🗓 {date_from or 'սկզբից'} — {date_to or 'մինչ այժմ'}\n"
+    for sheet, recs in sheets.items():
+        s = sum(r.get('amount', 0) for r in recs)
+        text += f"\n<b>Թերթիկ՝ {sheet}</b>: {s:,.2f} դրամ ({len(recs)} գրառում)"
+    text += f"\n\n<b>Ընդհանուր՝ {total:,.2f} դրամ</b>"
+
+    await update.message.reply_text(text, parse_mode="HTML")
+
+def create_main_menu(user_id=None):
     keyboard = [
-        [
-            InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record_menu")
-        ],
+        [InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record_menu")],
         [InlineKeyboardButton("📋 Ընտրել թերթիկ", callback_data="select_sheet")],
         [InlineKeyboardButton("📊 Կարգավիճակ", callback_data="status")],
         [InlineKeyboardButton("📈 Վիճակագրություն", callback_data="stats")],
         [InlineKeyboardButton("📊 Ընտրել աղյուսակ", callback_data="select_spreadsheet")]
     ]
+    if user_id in ADMIN_IDS:
+        keyboard.append([InlineKeyboardButton("💸 Վճարներ", callback_data="pay_menu")])
     return InlineKeyboardMarkup(keyboard)
 
 def create_add_record_menu():
@@ -246,8 +405,15 @@ def get_user_id_by_record_id(record_id: str) -> int:
     for user_id_str, user_data in users.items():
         if 'reports' in user_data and str(record_id) in user_data['reports']:
             return int(user_id_str)
-
-        
+    # Если не найдено — ищем по имени в БД
+    from database import get_record_from_db
+    rec = get_record_from_db(record_id)
+    if rec:
+        supplier = rec.get('supplier')
+        # ищем пользователя с таким display_name
+        for user_id_str, user_data in users.items():
+            if user_data.get('display_name') == supplier:
+                return int(user_id_str)
     return 0
 
 def format_record_info(record: dict) -> str:
@@ -275,12 +441,12 @@ async def text_menu_handler(update: Update, context: CallbackContext):
     if not is_user_allowed(user_id):
         return
     
-    context.user_data.clear()
+    await clear_user_data(update, context)
     
     # Отправляем Inline-меню при нажатии на Reply-кнопку
     await update.message.reply_text(
         "📋 Հիմնական ընտրացանկ:",
-        reply_markup=create_main_menu()
+        reply_markup=create_main_menu(user_id)
     )
     
 def create_reply_menu():
@@ -324,7 +490,7 @@ async def start(update: Update, context: CallbackContext):
         "• ✏️ Գրառումների խմբագրում և ջնջում\n"
         "• 📊 Համաժամեցում տվյալների բազայի հետ\n"
         "• 📝 Գործողությունների գրանցում\n\n",
-        reply_markup=create_main_menu()
+        reply_markup=create_main_menu(user_id)
     )
     
     
@@ -334,12 +500,12 @@ async def menu_command(update: Update, context: CallbackContext):
     if not is_user_allowed(user_id):
         return
     
-    context.user_data.clear()
+    await clear_user_data(update, context)
 
     # Отправляем Inline-меню
     await update.message.reply_text(
         "📋 Հիմնական ընտրացանկ:",
-        reply_markup=create_main_menu()
+        reply_markup=create_main_menu(user_id)
     )
     
 
@@ -490,8 +656,6 @@ async def sync_sheets_command(update: Update, context: CallbackContext, used_by_
             await update.message.reply_text("❌ Նախ պետք է ընտրել աղյուսակ և թերթիկ:")
         return
 
-    from google_connector import get_worksheet_by_name
-    from database import get_record_from_db, add_record_to_db, update_record_in_db
 
     worksheet = get_worksheet_by_name(spreadsheet_id, sheet_name)
     if not worksheet:
@@ -589,6 +753,10 @@ async def start_add_skip_record(update: Update, context: CallbackContext):
 # === Обработчики кнопок ===
 
 async def button_handler(update: Update, context: CallbackContext):
+    """
+    Обработчик кнопок, запускается при нажатии на любую кнопку в боте.
+    """
+    
     query = update.callback_query
     await query.answer()
     
@@ -638,7 +806,34 @@ async def button_handler(update: Update, context: CallbackContext):
     elif data == "manual_input":
         return await manual_input(update, context)
     elif data == "back_to_menu":
-        await query.edit_message_text("📋 Հիմնական ընտրացանկ:", reply_markup=create_main_menu())
+        await query.edit_message_text("📋 Հիմնական ընտրացանկ:", reply_markup=create_main_menu(user_id))
+    if data == "pay_menu" and user_id in ADMIN_IDS:
+        # Меню работников
+        users = load_users()
+        keyboard = []
+        for uid, udata in users.items():
+            if udata.get('display_name'):
+                keyboard.append([InlineKeyboardButton(udata['display_name'], callback_data=f"pay_user_{udata['display_name']}")])
+        keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")])
+        await query.edit_message_text("Ընտրեք աշխատակցին:", reply_markup=InlineKeyboardMarkup(keyboard))
+    elif data.startswith("pay_user_") and user_id in ADMIN_IDS:
+        display_name = data.replace("pay_user_", "")
+        keyboard = [
+            [InlineKeyboardButton("➕ Ավելացնել վճարում", callback_data=f"add_payment_{display_name}")],
+            [InlineKeyboardButton("📊 Ստանալ սահմանի հաշվետվություն", callback_data=f"get_payment_report_{display_name}")],
+            [InlineKeyboardButton("⬅️ Հետ", callback_data="pay_menu")]
+        ]
+        await query.edit_message_text(f"Ընտրեք գործողությունը {display_name}-ի համար:", reply_markup=InlineKeyboardMarkup(keyboard))
+    elif data.startswith("add_payment_") and user_id in ADMIN_IDS:
+        display_name = data.replace("add_payment_", "")
+        context.user_data['pay_user'] = display_name
+        await query.edit_message_text(f"Մուտքագրեք վճարման գումարը:")
+        context.user_data['pay_step'] = 'amount'
+        return
+    elif data.startswith("get_payment_report_") and user_id in ADMIN_IDS:
+        display_name = data.replace("get_payment_report_", "")
+        await send_payment_report(update, context, display_name)
+        return
 
 async def show_status(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -778,7 +973,7 @@ async def select_sheet(update: Update, context: CallbackContext):
         f"✅ Ընտրված թերթիկ: <b>{sheet_name}</b>\n\n"
         f"Այժմ կարող եք գրառումներ ավելացնել:",
         parse_mode="HTML",
-        reply_markup=create_main_menu()
+        reply_markup=create_main_menu(user_id)
     )
     
     await send_to_log_chat(context, f"Ընտրվել է ակտիվ թերթիկ: {sheet_name}")
@@ -1049,7 +1244,7 @@ async def get_amount(update: Update, context: CallbackContext):
             action = "Ավելացում"
         await send_report(context, action, record, user_info)
         
-        context.user_data.clear()
+        await clear_user_data(update, context)
 
         return ConversationHandler.END
 
@@ -1221,7 +1416,8 @@ async def get_edit_value(update: Update, context: CallbackContext):
     await send_report(context, "Խմբագրում", record, user_info)
     
     # Очищаем данные пользователя
-    context.user_data.clear()
+    await clear_user_data(update, context)
+
     
     return ConversationHandler.END
 
@@ -1312,7 +1508,7 @@ async def confirm_delete(update: Update, context: CallbackContext):
     await query.edit_message_text(
         result_text,
         parse_mode="HTML",
-        reply_markup=create_main_menu()
+        reply_markup=create_main_menu(user_id)
     )
     
     # Отправляем отчет
@@ -1336,9 +1532,9 @@ async def cancel(update: Update, context: CallbackContext):
     
     await update.message.reply_text(
         "❌ Գործողությունը չեղարկված է:",
-        reply_markup=create_main_menu()
+        reply_markup=create_main_menu(user_id)
     )
-    context.user_data.clear()
+    await clear_user_data(update, context)
     return ConversationHandler.END
 
 # === Обработчик ошибок ===
@@ -1346,6 +1542,8 @@ async def cancel(update: Update, context: CallbackContext):
 async def error_handler(update: object, context: CallbackContext) -> None:
     """Обрабатывает ошибки"""
     logger.error(f"Բացառություն թարմացումը մշակելիս: {context.error}")
+    import traceback
+    logger.error(traceback.format_exc())
     
     # Отправляем ошибку в лог-чат
     if context.error:
@@ -1848,13 +2046,281 @@ async def select_final_sheet(update: Update, context: CallbackContext):
         f"📋 Ակտիվ թերթիկ: <b>{sheet_name}</b>\n\n"
         f"Այժմ կարող եք գրառումներ ավելացնել:",
         parse_mode="HTML",
-        reply_markup=create_main_menu()
+        reply_markup=create_main_menu(user_id)
     )
     
     await send_to_log_chat(context, f"Пользователь {user_id} выбрал лист: {sheet_name}")
 
-# === Настройка приложения ===
+async def message_handler(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        return
+    step = context.user_data.get('pay_step')
+    if step == 'amount':
+        try:
+            amount = float(update.message.text.strip())
+            context.user_data['pay_amount'] = amount
+            curr_date = datetime.now().strftime('%Y-%m-%d') 
+            context.user_data['pay_date_from'] = curr_date
+            context.user_data['pay_date_to'] = curr_date
+            context.user_data['pay_step'] = 'comment'
+            await update.message.reply_text("Մուտքագրեք մեկնաբանություն (կամ ուղարկեք +):")
+        except ValueError:
+            await update.message.reply_text("❌ Սխալ գումար: Մուտքագրեք թիվ:")
+    elif step == 'period':
+        curr_date = datetime.now().strftime('%Y-%m-%d')
+        period = update.message.text.strip()
+        if period == "+":
+            date_from, date_to = None, None
+        else:
+            parts = period.split()
+            date_from = parts[0] if len(parts) > 0 else None
+            date_to = parts[1] if len(parts) > 1 else None
+        if date_from == "+":
+            date_from = curr_date
+        if date_to == "+":
+            date_to = curr_date   
+        def checkIsDate(date_str):
+            try:
+                pd.to_datetime(date_str, format='%Y-%m-%d', errors='raise')
+                return True
+            except ValueError:
+                return False
+        if date_from and not checkIsDate(date_from):
+            await update.message.reply_text("❌ Սխալ ամսաթիվ: Մուտքագրեք ամսաթիվը ձևաչափով 2024-01-01:")
+            step = 'period'
+        elif date_to and not checkIsDate(date_to):
+            await update.message.reply_text("❌ Սխալ ամսաթիվ: Մուտքագրեք ամսաթիվը ձևաչափով 2024-01-01:")
+            step = 'period'
+        if date_from and date_to and pd.to_datetime(date_from) > pd.to_datetime(date_to):
+            date_from, date_to = date_to, date_from
+            
+        context.user_data['pay_date_from'] = date_from
+        context.user_data['pay_date_to'] = date_to
+        context.user_data['pay_step'] = 'comment'
+        await update.message.reply_text("Մուտքագրեք մեկնաբանություն (կամ ուղարկեք +):")
+    elif step == 'comment':
+        comment = update.message.text.strip()
+        if comment == "+":
+            comment = ""
+        display_name = context.user_data['pay_user']
+        amount = context.user_data['pay_amount']
+        date_from = context.user_data['pay_date_from']
+        date_to = context.user_data['pay_date_to']
+        user_settings = get_user_settings(user_id)
+        spreadsheet_id = user_settings.get('active_spreadsheet_id')
+        sheet_name = user_settings.get('active_sheet_name')
+        add_payment(display_name, spreadsheet_id, sheet_name, amount, date_from, date_to, comment)
+        uId = await getUserIdByDisplayName(display_name)
+        senderId = update.effective_user.id
+        users = load_users()
+        senderName = users[str(senderId)]['display_name']
+        payment_text = "💰 <b> Վճարման տեղեկություն </b>\n\n"
+        payment_text += f"📊 Փոխանցող: {senderName}\n"
+        payment_text += f"👤 Ստացող: {display_name}\n"
+        payment_text += f"🗓 Ամսաթիվ: {date_from}\n"
+        payment_text += f"💵 Գումար: {amount:,.2f} դրամ\n"
+        payment_text += f"📝 Նկարագրություն: {comment}\n"
+        
+        
+        keyboard = [[InlineKeyboardButton("✅ Վերադառնալ աշխատակցին", callback_data=f"pay_user_{display_name}")]]
+        await update.message.reply_text("✅ Վճարումը ավելացված է։", 
+                                        reply_markup=InlineKeyboardMarkup(keyboard))
+        await clear_user_data(update, context)
+        await sendMessageToUser(update, context, uId, payment_text, reply_markup=None)
 
+
+async def clear_user_data(update: Update, context: CallbackContext):
+    """Очищает данные пользователя"""
+    spreadsheet_id = context.user_data.get('active_spreadsheet_id')
+    sheet_name = context.user_data.get('active_sheet_name')
+    context.user_data.clear()
+    context.user_data['active_spreadsheet_id'] = spreadsheet_id
+    context.user_data['active_sheet_name'] = sheet_name
+   
+   
+async def sendMessageToUser(update, context, user_id, text, reply_markup=None):
+    """Отправляет сообщение пользователю по ID"""
+    try:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
+        await send_to_log_chat(context, f"Ошибка отправки сообщения пользователю {user_id}: {e}")
+        
+# === Настройка приложения ===
+async def send_payment_report(update, context, display_name):
+    """
+    Формирует и отправляет Excel-отчет с разбивкой по промежуткам выплат для заданного работника.
+    В конце добавляется итоговая таблица по всем листам.
+    """
+    all_summaries = []
+    
+    # 1. Синхронизация данных из Google Sheets в БД
+    # spreadsheets = get_all_spreadsheets()
+    # for spreadsheet in spreadsheets:
+    #     spreadsheet_id = spreadsheet['id']
+    #     for sheets in get_worksheets_info(spreadsheet_id):
+    #         for sheet in sheets:
+    #             if isinstance(sheet, str):
+    #                 break
+    #             sheet_name = sheet.get('title') or sheet.get('name')
+    #             worksheet = get_worksheet_by_name(spreadsheet_id, sheet_name)
+    #             if not worksheet:
+    #                 continue
+    #             rows = worksheet.get_all_records()
+    #             for row in rows:
+    #                 if str(row.get('մատակարար', '')).strip() == display_name:
+    #                     record_id = str(row.get('ID', '')).strip()
+    #                     if not get_record_from_db(record_id):
+    #                         try:
+    #                             amount = float(str(row.get('Արժեք', '0')).replace(',', '.').replace(' ', ''))
+    #                         except Exception:
+    #                             amount = 0.0
+    #                         record = {
+    #                             'id': record_id,
+    #                             'date': str(row.get('ամսաթիվ', '')).replace("․", ".").strip(),
+    #                             'supplier': display_name,
+    #                             'direction': str(row.get('ուղղություն', '')).strip(),
+    #                             'description': str(row.get('ծախսի բնութագիր', '')).strip(),
+    #                             'amount': amount,
+    #                             'spreadsheet_id': spreadsheet_id,
+    #                             'sheet_name': sheet_name
+    #                         }
+    #                         add_record_to_db(record)
+
+    # 2. Получаем все записи из БД и группируем по листам
+    db_records = get_all_records()
+    filtered_recrods = []
+    sum_ = 0
+    for record in db_records:
+        if record['amount'] == 0:
+            continue
+        if record['supplier'] != display_name:
+            continue
+        record['date'] = normalize_date(record['date'])
+        if record['supplier'] == "Նարեկ" and (datetime.strptime(record['date'], '%d.%m.%y').date() >= datetime.strptime("2025-05-10", '%Y-%m-%d').date()):
+            filtered_recrods.append(record)
+        elif record['supplier'] != "Նարեկ" and (datetime.strptime(record['date'], '%d.%m.%y').date() >= datetime.strptime("2024-12-05", '%Y-%m-%d').date()):
+                filtered_recrods.append(record)
+        else:
+            pass
+
+    sheets = {}
+    for rec in filtered_recrods:
+        if rec.get('supplier') == display_name:
+            spreadsheet_id = rec.get('spreadsheet_id', '—')
+            sheet_name = rec.get('sheet_name', '—')
+            key = (spreadsheet_id, sheet_name)
+            sheets.setdefault(key, []).append(rec)
+            
+    # 3. Формируем и отправляем отчет по каждому листу
+    for (spreadsheet_id, sheet_name), records in sheets.items():
+        
+        df = pd.DataFrame(records)
+        if not df.empty:
+            df['date'] = pd.to_datetime(df['date'], errors='coerce', dayfirst=True)
+        else:
+            df['date'] = pd.to_datetime([])
+        
+        
+        df_amount_total = df['amount'].sum() if not df.empty else 0
+
+        df.loc["Իտոգ"] = [
+          '—', '—', '—', '—', '—', df_amount_total, '—', '—', '—', '—'  
+        ]
+
+        # Остаток по невыплаченным расходам
+        paid_dates = []
+        
+        # Сохраняем для итоговой сводки
+        all_summaries.append({
+            'Աղյուսակ': spreadsheet_id,
+            'Թեթր': sheet_name,
+            'Ծախս': df_amount_total,
+            "Վճար": '—',  
+            'Մնացորդ': '—'
+        })
+
+        summary = pd.DataFrame([{
+            'Ընդհանուր ծախս': df_amount_total,
+        }])
+
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='All Expenses', index=False)
+            summary.to_excel(writer, sheet_name='Summary', index=False)
+        output.seek(0)
+
+        await update.effective_message.reply_document(
+            document=output,
+            filename=f"{display_name}_{sheet_name}_report.xlsx",
+            caption=(
+                f"Թերթ: {sheet_name}\n"
+                f"Ընդհանուր ծախս: {df_amount_total:,.2f}\n"
+            )
+        )
+        
+    
+
+ 
+    # 4. Итоговая таблица по всем листам
+    if all_summaries:
+        df_total = pd.DataFrame(all_summaries)
+        total_expenses_all = df_total['Ծախս'].sum()
+        payments = get_payments(display_name, spreadsheet_id, sheet_name)
+        if not payments:
+            total_paid_all = 0
+        else:
+            df_pay_raw = pd.DataFrame(
+                payments, 
+                columns=['amount', 'date_from', 'date_to', 'comment', 'created_at']
+            )
+
+            # Приводим типы
+            df_pay_raw['amount'] = pd.to_numeric(df_pay_raw['amount'], errors='coerce').fillna(0)
+            df_pay_raw['date_from'] = pd.to_datetime(df_pay_raw['date_from'], errors='coerce')
+            df_pay_raw['date_to'] = pd.to_datetime(df_pay_raw['date_to'], errors='coerce')
+
+            # Слияние интервалов и агрегирование
+            df_pay = merge_payment_intervals(df_pay_raw[['amount', 'date_from', 'date_to']])
+
+            # Итоговая сумма после объединения
+            total_paid_all = df_pay['amount'].sum()
+        total_left_all = total_expenses_all - total_paid_all
+        df_total.loc['Իտոգ'] = [
+            '—', '—',
+            total_expenses_all,
+            total_paid_all,
+            total_left_all
+        ]
+
+        output_total = BytesIO()
+        with pd.ExcelWriter(output_total, engine='openpyxl') as writer:
+            df_total.to_excel(writer, sheet_name='Իտոգներ', index=False)
+        output_total.seek(0)
+        
+        await update.effective_message.reply_document(
+            document=output_total,
+            filename=f"{display_name}_TOTAL_report.xlsx",
+            caption=(
+                f"Ընդհանոր ծախսեր:\n"
+                f"• Ընդհանուր ծախս: {total_expenses_all:,.2f}\n"
+                f"• Ընդհանուր Վճար: {total_paid_all:,.2f}\n"
+                f"• Ընդհանուր մնացորդ: {total_left_all:,.2f}"
+            )
+        )
+async def getUserIdByDisplayName(display_name):
+    """Получает ID пользователя по его отображаемому имени"""
+    users = load_users()
+    for user_id, info in users.items():
+        if info.get('display_name') == display_name:
+            return int(user_id)
+    return None
 def main():
     """Основная функция запуска бота"""
     try:
@@ -1898,7 +2364,7 @@ def main():
                 MessageHandler(filters.Text(["📋 Մենյու"]), text_menu_handler)  # Добавляем fallback для меню
             ],
         )
-        
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, message_handler))   
         # Регистрация обработчиков команд
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("menu", menu_command))
@@ -1916,7 +2382,8 @@ def main():
         application.add_handler(CommandHandler("allowed_users", allowed_users_command))
         application.add_handler(CommandHandler("set_user_name", set_user_name_command))
         application.add_handler(CommandHandler("sync_sheets", sync_sheets_command))
-        
+        application.add_handler(CommandHandler("my_report", my_report_command))
+    
         # Регистрация ConversationHandler'ов
         application.add_handler(add_record_conv)
         application.add_handler(edit_record_conv)

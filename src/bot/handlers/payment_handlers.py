@@ -1,0 +1,547 @@
+"""
+Обработчики платежей
+"""
+import logging
+import pandas as pd
+from datetime import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CallbackContext, ConversationHandler
+
+from ...config.settings import ADMIN_IDS
+from ...utils.config_utils import load_users, get_user_settings, send_to_log_chat
+from ...database.database_manager import add_payment, get_payments, get_all_records
+from ...utils.payment_utils import (
+    normalize_date, merge_payment_intervals, format_date_for_interval,
+    get_user_id_by_display_name, send_message_to_user
+)
+from ..keyboards.inline_keyboards import create_main_menu
+
+logger = logging.getLogger(__name__)
+
+# Состояния для ConversationHandler платежей
+PAYMENT_AMOUNT, PAYMENT_PERIOD, PAYMENT_COMMENT = range(3)
+
+async def pay_menu_handler(update: Update, context: CallbackContext):
+    """Обработчик меню платежей"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer("❌ Մուտքն արգելված է")
+        return
+    
+    # Меню работников
+    users = load_users()
+    keyboard = []
+    for uid, udata in users.items():
+        if udata.get('display_name'):
+            keyboard.append([InlineKeyboardButton(
+                udata['display_name'], 
+                callback_data=f"pay_user_{udata['display_name']}"
+            )])
+    keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")])
+    
+    await query.edit_message_text(
+        "👥 Ընտրեք աշխատակցին:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def pay_user_handler(update: Update, context: CallbackContext):
+    """Обработчик выбора пользователя для платежа"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer("❌ Մուտքն արգելված է")
+        return
+    
+    display_name = query.data.replace("pay_user_", "")
+    keyboard = [
+        [InlineKeyboardButton("➕ Ավելացնել վճարում", callback_data=f"add_payment_{display_name}")],
+        [InlineKeyboardButton("📊 Ստանալ սահմանի հաշվետվություն", callback_data=f"get_payment_report_{display_name}")],
+        [InlineKeyboardButton("⬅️ Հետ", callback_data="pay_menu")]
+    ]
+    
+    await query.edit_message_text(
+        f"💰 Ընտրեք գործողությունը {display_name}-ի համար:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def start_add_payment(update: Update, context: CallbackContext):
+    """Начинает процесс добавления платежа"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer("❌ Մուտքն արգելված է")
+        return ConversationHandler.END
+    
+    display_name = query.data.replace("add_payment_", "")
+    context.user_data['pay_user'] = display_name
+    
+    await query.edit_message_text(
+        f"💰 Ավելացնել վճարում {display_name}-ի համար\n\n"
+        f"💵 Մուտքագրեք վճարման գումարը:"
+    )
+    
+    return PAYMENT_AMOUNT
+
+async def get_payment_amount(update: Update, context: CallbackContext):
+    """Получает сумму платежа"""
+    try:
+        amount = float(update.message.text.strip())
+        context.user_data['pay_amount'] = amount
+        
+        curr_date = datetime.now().strftime('%Y-%m-%d')
+        context.user_data['pay_date_from'] = curr_date
+        context.user_data['pay_date_to'] = curr_date
+        
+        await update.message.reply_text(
+            "📝 Մուտքագրեք մեկնաբանություն (կամ ուղարկեք + բացակայող մեկնաբանության համար):"
+        )
+        
+        return PAYMENT_COMMENT
+        
+    except ValueError:
+        await update.message.reply_text("❌ Սխալ գումար: Մուտքագրեք թիվ:")
+        return PAYMENT_AMOUNT
+    
+    try:
+        amount = float(amount_text.replace(',', '.'))
+        if amount <= 0:
+            await update.message.reply_text(
+                "❌ Գումարը պետք է լինի դրական թիվ: Խնդրում ենք նորից մուտքագրել:",
+                reply_markup=create_back_to_menu_keyboard()
+            )
+            return PAYMENT_AMOUNT
+        
+        context.user_data['payment_amount'] = amount
+        
+        await update.message.reply_text(
+            f"💰 Գումար: {amount:,.2f} դրամ\n\n"
+            f"Մուտքագրեք նկարագրությունը (կամ /skip բաց թողնելու համար):",
+            reply_markup=create_back_to_menu_keyboard()
+        )
+        
+        return PAYMENT_DESCRIPTION
+        
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Սխալ գումարի ձևաչափ: Խնդրում ենք մուտքագրել վավեր թիվ:",
+            reply_markup=create_back_to_menu_keyboard()
+        )
+        return PAYMENT_AMOUNT
+
+async def get_payment_description(update: Update, context: CallbackContext):
+    """Получает описание платежа"""
+    user_id = update.effective_user.id
+    
+    if update.message.text == "/skip":
+        description = ""
+    else:
+        description = update.message.text.strip()
+    
+    context.user_data['payment_description'] = description
+    
+    # Сохраняем платеж
+    recipient_name = context.user_data.get('payment_recipient')
+    amount = context.user_data.get('payment_amount')
+    
+    # Создаем запись о платеже
+    current_date = datetime.now().strftime("%d.%m.%Y")
+    payer_name = get_user_display_name(user_id)
+    
+    # Формируем описание платежа
+    payment_desc = f"Վճարում {recipient_name}-ին"
+    if description:
+        payment_desc += f" - {description}"
+    
+    # Добавляем в базу данных
+    record_id = add_record_to_db(
+        date=current_date,
+        supplier=payer_name,
+        direction="Վճարում",
+        description=payment_desc,
+        amount=amount,
+        user_id=user_id
+    )
+    
+    if record_id:
+        # Добавляем в Google Sheets
+        success = add_record_to_sheet(
+            user_id, current_date, payer_name, "Վճարում", payment_desc, amount
+        )
+        
+        success_text = "✅ Գրանցված է գրքապանակում" if success else "⚠️ Գրանցված է միայն տվյալների բազայում"
+        
+        await update.message.reply_text(
+            f"✅ Վճարումը գրանցված է!\n\n"
+            f"📅 Ամսաթիվ: {current_date}\n"
+            f"👤 Վճարող: {payer_name}\n"
+            f"👤 Ստացող: {recipient_name}\n"
+            f"💰 Գումար: {amount:,.2f} դրամ\n"
+            f"📝 Նկարագրություն: {payment_desc}\n\n"
+            f"{success_text}",
+            reply_markup=create_back_to_menu_keyboard()
+        )
+        
+        # Очищаем данные сессии
+        context.user_data.clear()
+        
+    else:
+        await update.message.reply_text(
+            "❌ Սխալ վճարման գրանցման ժամանակ:",
+            reply_markup=create_back_to_menu_keyboard()
+        )
+    
+    return ConversationHandler.END
+
+async def get_payment_period(update: Update, context: CallbackContext):
+    """Получает период платежа"""
+    curr_date = datetime.now().strftime('%Y-%m-%d')
+    period = update.message.text.strip()
+    
+    if period == "+":
+        date_from, date_to = None, None
+    else:
+        parts = period.split()
+        date_from = parts[0] if len(parts) > 0 else None
+        date_to = parts[1] if len(parts) > 1 else None
+        
+    if date_from == "+":
+        date_from = curr_date
+    if date_to == "+":
+        date_to = curr_date
+        
+    def check_is_date(date_str):
+        try:
+            pd.to_datetime(date_str, format='%Y-%m-%d', errors='raise')
+            return True
+        except ValueError:
+            return False
+    
+    if date_from and not check_is_date(date_from):
+        await update.message.reply_text("❌ Սխալ ամսաթիվ: Մուտքագրեք ամսաթիվը ձևաչափով 2024-01-01:")
+        return PAYMENT_PERIOD
+        
+    elif date_to and not check_is_date(date_to):
+        await update.message.reply_text("❌ Սխալ ամսաթիվ: Մուտքագրեք ամսաթիվը ձևաչափով 2024-01-01:")
+        return PAYMENT_PERIOD
+        
+    if date_from and date_to and pd.to_datetime(date_from) > pd.to_datetime(date_to):
+        date_from, date_to = date_to, date_from
+        
+    context.user_data['pay_date_from'] = date_from
+    context.user_data['pay_date_to'] = date_to
+    
+    await update.message.reply_text("📝 Մուտքագրեք մեկնաբանություն (կամ ուղարկեք +):")
+    return PAYMENT_COMMENT
+
+async def get_payment_comment(update: Update, context: CallbackContext):
+    """Получает комментарий к платежу и сохраняет его"""
+    user_id = update.effective_user.id
+    comment = update.message.text.strip()
+    
+    if comment == "+":
+        comment = ""
+        
+    display_name = context.user_data['pay_user']
+    amount = context.user_data['pay_amount']
+    date_from = context.user_data['pay_date_from']
+    date_to = context.user_data['pay_date_to']
+    
+    user_settings = get_user_settings(user_id)
+    spreadsheet_id = user_settings.get('active_spreadsheet_id')
+    sheet_name = user_settings.get('active_sheet_name')
+    
+    # Добавляем платеж в базу данных
+    success = add_payment(display_name, spreadsheet_id, sheet_name, amount, date_from, date_to, comment)
+    
+    if success:
+        # Получаем ID получателя
+        recipient_id = await get_user_id_by_display_name(display_name)
+        sender_id = update.effective_user.id
+        users = load_users()
+        sender_name = users.get(str(sender_id), {}).get('display_name', 'Админ')
+        
+        # Формируем сообщение о платеже
+        payment_text = (
+            f"💰 <b>Վճարման տեղեկություն</b>\n\n"
+            f"📊 Փոխանցող: {sender_name}\n"
+            f"👤 Ստացող: {display_name}\n"
+            f"🗓 Ամսաթիվ: {date_from}\n"
+            f"💵 Գումար: {amount:,.2f} դրամ\n"
+            f"📝 Նկարագրություն: {comment or 'Առանց մեկնաբանության'}\n"
+        )
+        
+        keyboard = [[InlineKeyboardButton("✅ Վերադառնալ աշխատակցին", callback_data=f"pay_user_{display_name}")]]
+        
+        await update.message.reply_text(
+            "✅ Վճարումը հաջողությամբ ավելացված է:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        # Отправляем уведомление получателю
+        if recipient_id:
+            await send_message_to_user(context, recipient_id, payment_text)
+        
+        # Логируем в лог-чат
+        await send_to_log_chat(context, f"Ավելացված է վճարում: {display_name} - {amount:,.2f} դրամ")
+        
+    else:
+        await update.message.reply_text("❌ Սխալ վճարումն ավելացնելիս:")
+    
+    # Очищаем данные пользователя
+    context.user_data.clear()
+    return ConversationHandler.END
+
+async def send_payment_report(update: Update, context: CallbackContext, display_name: str):
+    """
+    Формирует и отправляет Excel-отчет с разбивкой по промежуткам выплат для заданного работника
+    """
+    try:
+        # Получаем все записи из БД и фильтруем по пользователю
+        db_records = get_all_records()
+        filtered_records = []
+        
+        for record in db_records:
+            if record['amount'] == 0:
+                continue
+            if record['supplier'] != display_name:
+                continue
+                
+            # Нормализуем дату
+            try:
+                record['date'] = normalize_date(record['date'])
+            except Exception:
+                continue
+                
+            # Применяем фильтры по датам в зависимости от пользователя
+            record_date = datetime.strptime(record['date'], '%d.%m.%y').date()
+            
+            if record['supplier'] == "Նարեկ":
+                start_date = datetime.strptime("2025-05-10", '%Y-%m-%d').date()
+            else:
+                start_date = datetime.strptime("2024-12-05", '%Y-%m-%d').date()
+                
+            if record_date >= start_date:
+                filtered_records.append(record)
+
+        if not filtered_records:
+            # Определяем кнопку "Назад" в зависимости от прав пользователя
+            user_id = update.effective_user.id
+            if user_id in ADMIN_IDS:
+                back_button = InlineKeyboardButton("⬅️ Հետ", callback_data=f"pay_user_{display_name}")
+            else:
+                back_button = InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")
+                
+            await update.callback_query.edit_message_text(
+                f"📊 {display_name}-ի համար գրառումներ չեն գտնվել:",
+                reply_markup=InlineKeyboardMarkup([[back_button]])
+            )
+            return
+
+        # Группируем по листам
+        sheets = {}
+        for rec in filtered_records:
+            spreadsheet_id = rec.get('spreadsheet_id', '—')
+            sheet_name = rec.get('sheet_name', '—')
+            key = (spreadsheet_id, sheet_name)
+            sheets.setdefault(key, []).append(rec)
+
+        # Создаем отдельные файлы для каждого листа + итоговый файл (как в старом main.py)
+        from openpyxl import Workbook
+        from io import BytesIO
+        import pandas as pd
+        
+        all_summaries = []
+        
+        # 1. Формируем и отправляем отчет по каждому листу отдельно
+        for (spreadsheet_id, sheet_name), records in sheets.items():
+            
+            df = pd.DataFrame(records)
+            if not df.empty:
+                df['date'] = pd.to_datetime(df['date'], errors='coerce', dayfirst=True)
+            else:
+                df['date'] = pd.to_datetime([])
+            
+            df_amount_total = df['amount'].sum() if not df.empty else 0
+
+            # Добавляем строку итога с правильным количеством колонок
+            if not df.empty:
+                # Создаем строку итога с нужным количеством колонок
+                total_row = ['—'] * len(df.columns)
+                # Находим индекс колонки 'amount' и заменяем значение
+                if 'amount' in df.columns:
+                    amount_idx = df.columns.get_loc('amount')
+                    total_row[amount_idx] = df_amount_total
+                df.loc["Իտոգ"] = total_row
+
+            # Получаем платежи для этого конкретного листа
+            payments = get_payments(display_name, spreadsheet_id, sheet_name)
+            if not payments:
+                total_paid_sheet = 0
+                df_pay_sheet = pd.DataFrame()
+            else:
+                df_pay_raw_sheet = pd.DataFrame(
+                    payments, 
+                    columns=['amount', 'date_from', 'date_to', 'comment', 'created_at']
+                )
+
+                # Приводим типы
+                df_pay_raw_sheet['amount'] = pd.to_numeric(df_pay_raw_sheet['amount'], errors='coerce').fillna(0)
+                df_pay_raw_sheet['date_from'] = pd.to_datetime(df_pay_raw_sheet['date_from'], errors='coerce')
+                df_pay_raw_sheet['date_to'] = pd.to_datetime(df_pay_raw_sheet['date_to'], errors='coerce')
+
+                # Слияние интервалов и агрегирование для этого листа
+                df_pay_sheet = merge_payment_intervals(df_pay_raw_sheet[['amount', 'date_from', 'date_to']])
+                
+                # Форматируем даты для отображения
+                df_pay_sheet['date_from'] = df_pay_sheet['date_from'].apply(format_date_for_interval)
+                df_pay_sheet['date_to'] = df_pay_sheet['date_to'].apply(format_date_for_interval)
+
+                # Итоговая сумма после объединения для этого листа
+                total_paid_sheet = df_pay_raw_sheet['amount'].sum()
+
+            total_left_sheet = df_amount_total - total_paid_sheet
+            
+            # Сохраняем для итоговой сводки
+            all_summaries.append({
+                'Աղյուսակ': spreadsheet_id,
+                'Թեթր': sheet_name,
+                'Ծախս': df_amount_total,
+                "Վճար": total_paid_sheet,  
+                'Մնացորդ': total_left_sheet
+            })
+
+            # Создаем итоговую таблицу для этого листа
+            summary = pd.DataFrame([{
+                'Ընդհանուր ծախս': df_amount_total,
+                'Ընդհանուր վճար': total_paid_sheet,
+                'Մնացորդ': total_left_sheet
+            }])
+
+            # Создаем Excel файл для этого листа
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='Ծախսեր', index=False)
+                summary.to_excel(writer, sheet_name='Ամփոփ', index=False)
+                # Добавляем лист с платежами, если они есть
+                if not df_pay_sheet.empty:
+                    df_pay_sheet.to_excel(writer, sheet_name='Վճարումներ', index=False)
+                else:
+                    # Создаем пустой лист с заголовками
+                    empty_payments = pd.DataFrame(columns=['amount', 'date_from', 'date_to'])
+                    empty_payments.to_excel(writer, sheet_name='Վճարումներ', index=False)
+            output.seek(0)
+
+            # Отправляем файл для этого листа
+            await update.callback_query.message.reply_document(
+                document=output,
+                filename=f"{display_name}_{sheet_name}_report.xlsx",
+                caption=(
+                    f"📋 Թերթ: {sheet_name}\n"
+                    f"💰 Ընդհանուր ծախս: {df_amount_total:,.2f} դրամ\n"
+                    f"💵 Ընդհանուր վճար: {total_paid_sheet:,.2f} դրամ\n"
+                    f"💸 Մնացորդ: {total_left_sheet:,.2f} դրամ"
+                )
+            )
+
+        # 2. Итоговая таблица по всем листам
+        if all_summaries:
+            df_total = pd.DataFrame(all_summaries)
+            total_expenses_all = df_total['Ծախս'].sum()
+            total_paid_all = df_total['Վճար'].sum()
+            total_left_all = total_expenses_all - total_paid_all
+            
+            # Добавляем строку итога с правильным количеством колонок
+            total_row = ['—'] * len(df_total.columns)
+            # Заполняем нужные колонки
+            if 'Ծախս' in df_total.columns:
+                total_row[df_total.columns.get_loc('Ծախս')] = total_expenses_all
+            if 'Վճար' in df_total.columns:
+                total_row[df_total.columns.get_loc('Վճար')] = total_paid_all
+            if 'Մնացորդ' in df_total.columns:
+                total_row[df_total.columns.get_loc('Մնացորդ')] = total_left_all
+            df_total.loc['Իտոգ'] = total_row
+
+            # Получаем все платежи для общего отчета (по всем листам)
+            all_payments = []
+            for (spreadsheet_id, sheet_name), records in sheets.items():
+                payments = get_payments(display_name, spreadsheet_id, sheet_name)
+                if payments:
+                    for payment in payments:
+                        payment_data = list(payment) + [spreadsheet_id, sheet_name]
+                        all_payments.append(payment_data)
+
+            output_total = BytesIO()
+            with pd.ExcelWriter(output_total, engine='openpyxl') as writer:
+                df_total.to_excel(writer, sheet_name='Ամփոփ', index=False)
+                
+                # Добавляем общий лист с платежами по всем таблицам
+                if all_payments:
+                    df_all_payments = pd.DataFrame(
+                        all_payments, 
+                        columns=['amount', 'date_from', 'date_to', 'comment', 'created_at', 'spreadsheet_id', 'sheet_name']
+                    )
+                    df_all_payments.to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
+                else:
+                    # Создаем пустой лист с заголовками
+                    empty_all_payments = pd.DataFrame(columns=['amount', 'date_from', 'date_to', 'comment', 'created_at', 'spreadsheet_id', 'sheet_name'])
+                    empty_all_payments.to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
+                    
+            output_total.seek(0)
+            
+            # Отправляем итоговый файл
+            await update.callback_query.message.reply_document(
+                document=output_total,
+                filename=f"{display_name}_ԸՆԴՀԱՆՈՒՐ_հաշվետվություն.xlsx",
+                caption=(
+                    f"📊 <b>Ընդհանուր հաշվետվություն {display_name}-ի համար</b>\n\n"
+                    f"💰 Ընդհանուր ծախս: {total_expenses_all:,.2f} դրամ\n"
+                    f"💵 Ընդհանուր վճար: {total_paid_all:,.2f} դրամ\n"
+                    f"💸 Ընդհանուր մնացորդ: {total_left_all:,.2f} դրամ\n\n"
+                    f"📋 Թերթիկների քանակ: {len(sheets)}"
+                ),
+                parse_mode="HTML"
+            )
+        
+        # Добавляем кнопку для возврата в зависимости от прав пользователя
+        user_id = update.effective_user.id
+        if user_id in ADMIN_IDS:
+            back_button = InlineKeyboardButton("⬅️ Հետ", callback_data=f"pay_user_{display_name}")
+        else:
+            back_button = InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")
+            
+        keyboard = [[back_button]]
+        await update.callback_query.edit_message_text(
+            f"✅ Հաշվետվությունները ուղարկված են {display_name}-ի համար",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        await send_to_log_chat(context, f"Ստեղծվել են վճարային հաշվետվություններ {display_name}-ի համար")
+        
+    except Exception as e:
+        logger.error(f"Ошибка создания отчета для {display_name}: {e}")
+        user_id = update.effective_user.id
+        if user_id in ADMIN_IDS:
+            back_button = InlineKeyboardButton("⬅️ Հետ", callback_data=f"pay_user_{display_name}")
+        else:
+            back_button = InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")
+        keyboard = [[back_button]]
+        await update.callback_query.edit_message_text(
+            f"❌ Հաշվետվություն ստեղծելու սխալ: {e}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def cancel_payment(update: Update, context: CallbackContext):
+    """Отменяет процесс добавления платежа"""
+    user_id = update.effective_user.id
+    context.user_data.clear()
+    
+    await update.message.reply_text(
+        "❌ Վճարման ավելացումը չեղարկված է:",
+        reply_markup=create_main_menu(user_id)
+    )
+    
+    return ConversationHandler.END

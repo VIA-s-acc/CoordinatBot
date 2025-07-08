@@ -294,7 +294,6 @@ def initialize_and_sync_sheets():
                             logger.info(f"    ➕ Добавлена запись в БД: {row_id}")
                         else:
                             logger.warning(f"    ⚠️ Не удалось добавить запись в БД: {row_id}")
-
                     new_rows.append([
                         row_id,
                         normalized_date,
