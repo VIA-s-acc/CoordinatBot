@@ -16,11 +16,37 @@ def create_main_menu(user_id=None):
     ]
     
     if user_id and user_id in ADMIN_IDS:
-        keyboard.append([InlineKeyboardButton("💸 Վճարներ", callback_data="pay_menu")])
+        keyboard.extend([
+            [InlineKeyboardButton("💸 Վճարներ", callback_data="pay_menu")],
+            [InlineKeyboardButton("📊 Аналитика", callback_data="analytics_menu")],
+            [InlineKeyboardButton("⚙️ Настройки", callback_data="settings_menu")]
+        ])
     else:
         # Для обычных пользователей - кнопка просмотра их платежей
         keyboard.append([InlineKeyboardButton("💰 Իմ վճարումները", callback_data="my_payments")])
     
+    return InlineKeyboardMarkup(keyboard)
+
+def create_analytics_menu():
+    """Создает меню аналитики"""
+    keyboard = [
+        [InlineKeyboardButton("📊 Общая аналитика", callback_data="general_analytics")],
+        [InlineKeyboardButton("💰 Аналитика платежей", callback_data="payment_analytics")],
+        [InlineKeyboardButton("📈 Тренды", callback_data="trends_report")],
+        [InlineKeyboardButton("📋 Еженедельный отчет", callback_data="weekly_report")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def create_settings_menu():
+    """Создает меню настроек"""
+    keyboard = [
+        [InlineKeyboardButton("👥 Настройки пользователей", callback_data="user_settings_menu")],
+        [InlineKeyboardButton("🔔 Настройки уведомлений", callback_data="notification_settings")],
+        [InlineKeyboardButton("💾 Резервные копии", callback_data="backup_menu")],
+        [InlineKeyboardButton("🧹 Очистка данных", callback_data="cleanup_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]
+    ]
     return InlineKeyboardMarkup(keyboard)
 
 def create_add_record_menu():
