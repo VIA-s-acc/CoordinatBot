@@ -23,10 +23,27 @@ def create_main_menu(user_id=None):
 def create_add_record_menu():
     """Создает меню выбора типа добавления записи"""
     keyboard = [
-        [InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record")],
-        [InlineKeyboardButton("➕ Ավելացնել Բացթողում", callback_data="add_skip_record")],
+        [InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record_select_sheet")],
+        [InlineKeyboardButton("➕ Ավելացնել Բացթողում", callback_data="add_skip_record_select_sheet")],
         [InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+def create_add_record_sheet_selection(sheets_info, record_type):
+    """Создает меню выбора листа для добавления записи
+    
+    Args:
+        sheets_info: список информации о листах
+        record_type: тип записи ("record" или "skip")
+    """
+    keyboard = []
+    for sheet in sheets_info:
+        keyboard.append([InlineKeyboardButton(
+            f"📋 {sheet['title']}", 
+            callback_data=f"add_{record_type}_sheet_{sheet['title']}"
+        )])
+    
+    keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data="add_record_menu")])
     return InlineKeyboardMarkup(keyboard)
 
 def create_supplier_choice_keyboard(display_name=None):
@@ -35,7 +52,7 @@ def create_supplier_choice_keyboard(display_name=None):
     if display_name:
         keyboard.append([InlineKeyboardButton(f"👤 Օգտագործել իմ անունը ({display_name})", callback_data="use_my_name")])
     keyboard.append([InlineKeyboardButton(f"🏢 Օգտագործել Ֆիրմայի անունը", callback_data="use_firm_name")])
-    keyboard.append([InlineKeyboardButton("✏️ Մուտքագրել ձեռքով", callback_data="manual_input")])
+    # keyboard.append([InlineKeyboardButton("✏️ Մուտքագրել ձեռքով", callback_data="manual_input")])
     return InlineKeyboardMarkup(keyboard)
 
 def create_edit_menu(record_id: str, is_admin: bool = False):

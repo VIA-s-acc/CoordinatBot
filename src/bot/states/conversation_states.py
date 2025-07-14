@@ -3,6 +3,7 @@
 """
 
 # Состояния для добавления записи
+SHEET_SELECTION = 0  # Новое состояние для выбора листа
 DATE = 1
 SUPPLIER_CHOICE = 2
 SUPPLIER_MANUAL = 3
@@ -19,18 +20,19 @@ CONFIRM_DELETE = 9
 SET_REPORT_SHEET = 10
 
 # Состояния для платежей
-PAY_AMOUNT = 20
-PAY_PERIOD = 21
-PAY_COMMENT = 22
-PAYMENT_AMOUNT = 23
-PAYMENT_DESCRIPTION = 24
-PAYMENT_PERIOD = 25
-PAYMENT_COMMENT = 26
+PAYMENT_AMOUNT = 11
+PAYMENT_PERIOD = 12
+PAYMENT_COMMENT = 13
 
-# Состояния для поиска и экспорта
-SEARCH_QUERY = 30
-EXPORT_PERIOD = 31
+# Состояния для настроек
+SET_USER_LIMIT = 14
+SET_USER_CATEGORY = 15
 
-# Состояния для настройки пользователей
-SET_USER_NAME = 40
-SET_USER_DISPLAY_NAME = 41
+# Состояния для переводов
+ADD_TRANSLATION_KEY = 16
+ADD_TRANSLATION_LANG = 17
+ADD_TRANSLATION_TEXT = 18
+
+# Состояния для настройки языков
+SELECT_LANGUAGE = 60
+ADD_LANGUAGE = 61

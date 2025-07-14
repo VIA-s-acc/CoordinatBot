@@ -236,14 +236,20 @@ async def confirm_delete(update: Update, context: CallbackContext):
     """Подтверждает удаление записи"""
     query = update.callback_query
     user_id = update.effective_user.id
+    
+    logger.info(f"confirm_delete вызвана для пользователя {user_id}, callback_data: {query.data}")
+    
     if not is_user_allowed(user_id):
+        logger.warning(f"Пользователь {user_id} не имеет доступа к удалению")
         return
     
     record_id = query.data.replace("confirm_delete_", "")
+    logger.info(f"Извлечен record_id: {record_id}")
     
     # Удаляем из Google Sheets
     record = get_record_from_db(record_id)
     if not record:
+        logger.error(f"Запись {record_id} не найдена в БД")
         await query.edit_message_text("❌ Գրառումը չի գտնվել:")
         return
     

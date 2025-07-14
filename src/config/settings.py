@@ -35,6 +35,8 @@ GOOGLE_SCOPE = [
 ]
 GOOGLE_SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
+LOCALIZATION_FILE = os.path.join(BASE_DIR, 'src/config/localization.json')
+
 # Создаем директории если их нет
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(CREDENTIALS_DIR, exist_ok=True)

@@ -1,8 +1,6 @@
 """
 Обработчики кнопок и callback query
 """
-import os
-import json
 import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -40,58 +38,6 @@ def safe_parse_date(date_str: str, default_date: str = '2000-01-01') -> datetime
         return datetime.fromisoformat(date_str)
     except (ValueError, TypeError):
         return datetime.fromisoformat(default_date)
-async def show_sheet_selection_for_add_record(update: Update, context: CallbackContext, record_type: str):
-    """Показывает выбор листа для добавления записи"""
-    query = update.callback_query
-    user_id = update.effective_user.id
-    
-    logger.info(f"show_sheet_selection_for_add_record вызвана для пользователя {user_id}, record_type: {record_type}")
-    
-    # Получаем настройки пользователя
-    user_settings = get_user_settings(user_id)
-    spreadsheet_id = user_settings.get('active_spreadsheet_id')
-    
-    if not spreadsheet_id:
-        logger.warning(f"У пользователя {user_id} не настроен активный spreadsheet")
-        await query.edit_message_text(
-            "❌ Նախ պետք է ընտրել աղյուսակը",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-        return
-    
-    try:
-        logger.info(f"Получаем информацию о листах для spreadsheet_id: {spreadsheet_id}")
-        sheets_info, spreadsheet_title = get_cached_sheets_info(spreadsheet_id)
-        
-        if not sheets_info:
-            logger.warning(f"Нет листов в spreadsheet {spreadsheet_id}")
-            await query.edit_message_text(
-                "❌ Աղյուսակում թերթիկներ չկան",
-                reply_markup=create_back_to_menu_keyboard()
-            )
-            return
-        
-        logger.info(f"Создаем клавиатуру для {len(sheets_info)} листов")
-        keyboard = create_add_record_sheet_selection(sheets_info, record_type)
-        
-        record_text = "գրառում" if record_type == "record" else "բացթողում"
-        logger.info(f"Отправляем сообщение с клавиатурой для выбора листа")
-        await query.edit_message_text(
-            f"📋 Ընտրեք թերթիկը {record_text}-ի համար:\n\n"
-            f"📊 Աղյուսակ: <b>{spreadsheet_title}</b>",
-            parse_mode="HTML",
-            reply_markup=keyboard
-        )
-        logger.info(f"Сообщение с клавиатурой успешно отправлено")
-        
-    except Exception as e:
-        logger.error(f"Ошибка при создании выбора листов: {e}")
-        logger.error(f"Полная ошибка: {e}", exc_info=True)
-        await query.edit_message_text(
-            f"❌ Շխալ թերթիկների ցանկը ստանալիս: {e}",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-
 
 async def button_handler(update: Update, context: CallbackContext):
     """Основной обработчик кнопок"""
@@ -105,47 +51,13 @@ async def button_handler(update: Update, context: CallbackContext):
     await query.answer()
     
     data = query.data
-    logger.info(f"Обработка callback: {data} от пользователя {user_id}")
     
-    # ДЕБАГ: Проверяем специфичные callback'и
-    if data.startswith("confirm_delete_"):
-        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: callback {data} попал в button_handler вместо confirm_delete handler!")
-        await query.edit_message_text(
-            f"❌ Техническая ошибка\n\n"
-            f"Callback {data} попал в неправильный обработчик.\n"
-            f"Обратитесь к администратору.",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-        return
-    
-    if data.startswith("cancel_edit_"):
-        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: callback {data} попал в button_handler вместо cancel_edit handler!")
-        await query.edit_message_text(
-            f"❌ Техническая ошибка\n\n"
-            f"Callback {data} попал в неправильный обработчик.\n"
-            f"Обратитесь к администратору.",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-        return
-    
-    # ДЕБАГ: Проверяем, не должен ли этот callback обрабатываться ConversationHandler'ом
-    if data.startswith(("add_record_sheet_", "add_skip_sheet_")):
-        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: callback {data} попал в button_handler вместо ConversationHandler!")
-        await query.edit_message_text(
-            f"❌ Техническая ошибка\n\n"
-            f"Callback {data} попал в неправильный обработчик.\n"
-            f"Обратитесь к администратору.",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-        return
-    
-    # Главное меню - завершаем любой активный ConversationHandler
+    # Главное меню
     if data == "back_to_menu" or data == "main_menu":
         await query.edit_message_text(
             "📋 Հիմնական ընտրացանկ:",
             reply_markup=create_main_menu(user_id)
         )
-        return ConversationHandler.END
     
     # Меню добавления записи
     elif data == "add_record_menu":
@@ -154,16 +66,28 @@ async def button_handler(update: Update, context: CallbackContext):
             reply_markup=create_add_record_menu()
         )
     
-    # Обработка выбора листа для добавления записи - УДАЛЕНО, теперь обрабатывается ConversationHandler
-    # elif data == "add_record_select_sheet":
-    #     logger.info(f"Вызываем show_sheet_selection_for_add_record для record")
-    #     await show_sheet_selection_for_add_record(update, context, "record")
+    # Обработка выбора листа для добавления записи
+    elif data == "add_record_select_sheet":
+        await show_sheet_selection_for_add_record(update, context, "record")
     
     elif data == "add_skip_record_select_sheet":
-        logger.info(f"Вызываем show_sheet_selection_for_add_record для skip")
         await show_sheet_selection_for_add_record(update, context, "skip")
     
-
+    elif data.startswith("add_record_sheet_"):
+        sheet_name = data.replace("add_record_sheet_", "")
+        # Сохраняем имя листа в context.user_data
+        context.user_data['selected_sheet_name'] = sheet_name
+        # Импортируем функцию из record_handlers
+        from .record_handlers import start_add_record
+        return await start_add_record(update, context)
+    
+    elif data.startswith("add_skip_sheet_"):
+        sheet_name = data.replace("add_skip_sheet_", "")
+        # Сохраняем имя листа в context.user_data
+        context.user_data['selected_sheet_name'] = sheet_name
+        # Импортируем функцию из record_handlers
+        from .record_handlers import start_add_skip_record
+        return await start_add_skip_record(update, context)
     
     # Статус
     elif data == "show_status" or data == "status":
@@ -229,6 +153,15 @@ async def button_handler(update: Update, context: CallbackContext):
         from .edit_handlers import handle_delete_button
         return await handle_delete_button(update, context)
     
+    elif data.startswith("confirm_delete_"):
+        from .edit_handlers import confirm_delete
+        return await confirm_delete(update, context)
+    
+    elif data.startswith("cancel_edit_"):
+        record_id = data.replace("cancel_edit_", "")
+        keyboard = [[InlineKeyboardButton("✏️ Խմբագրել", callback_data=f"edit_record_{record_id}")]]
+        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
+    
     # Генерация отчетов
     elif data.startswith("generate_report_"):
         display_name = data.replace("generate_report_", "")
@@ -288,11 +221,6 @@ async def button_handler(update: Update, context: CallbackContext):
     
     elif data == "system_info":
         await system_info(update, context)
-        return
-    
-    elif data == "sort_sheet_by_date":
-        from .settings_handlers import sort_sheet_by_date_handler
-        await sort_sheet_by_date_handler(update, context)
         return
     
     elif data == "analytics_menu":
@@ -468,32 +396,8 @@ async def button_handler(update: Update, context: CallbackContext):
     elif data.startswith("revoke_user_"):
         await revoke_user_handler(update, context)
     
-    # Обработчик для user_management
-    elif data == "user_management":
-        await user_settings_menu(update, context)
-        return
-    
-    # Обработчик для отмены добавления пользователя
-    elif data == "cancel_add_user":
-        await cancel_add_user_handler(update, context)
-        return
-    
     else:
         logger.warning(f"Необработанный callback: {data}")
-        # Дополнительная диагностика для специфичных callback'ов
-        if data.startswith("confirm_delete_"):
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: confirm_delete callback {data} попал в button_handler!")
-        elif data.startswith("cancel_edit_"):
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: cancel_edit callback {data} попал в button_handler!")
-        
-        # Проверяем, не является ли это callback'ом для ConversationHandler
-        if data.startswith(("add_record_sheet_", "add_skip_sheet_")):
-            logger.error(f"ОШИБКА: callback {data} должен обрабатываться ConversationHandler, но попал в button_handler!")
-            await query.edit_message_text(
-                "❌ Сհալ: callback не обрабатывается правильно\n"
-                "Попробуйте снова или обратитесь к администратору",
-                reply_markup=create_back_to_menu_keyboard()
-            )
         # Callback'и add_payment_ обрабатываются ConversationHandler'ом
         # Для add_payment_ callback'ов не логируем, они обрабатываются в ConversationHandler
 
@@ -1337,407 +1241,458 @@ async def cleanup_backups_by_age(update: Update, context: CallbackContext, max_a
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-# ===== НԵԴՈՍՏԱՅՈՒՄ ФՈՒՆԿՑԻԱ РԵԶԵՐՎՆՈՒ ԿՈՊԻՐՈՎԱԼՈՒ =====
+# ===== ДОՊՈԼՆԻՏԵԼԻ ОБРАБОТЧИКՆԵՐ =====
 
-async def user_permissions_menu(update: Update, context: CallbackContext):
-    """Меню разрешений пользователей"""
+async def general_analytics_handler(update: Update, context: CallbackContext):
+    """Обработчик общей аналитики"""
     query = update.callback_query
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
-        return
-    
-    await query.answer()
-    
-    keyboard = [
-        [InlineKeyboardButton("✅ Авторизованные пользователи", callback_data="show_authorized_users")],
-        [InlineKeyboardButton("❌ Неавторизованные пользователи", callback_data="show_unauthorized_users")],
-        [InlineKeyboardButton("➕ Добавить разрешения", callback_data="add_permissions")],
-        [InlineKeyboardButton("➖ Убрать разрешения", callback_data="remove_permissions")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]
-    ]
-    
-    await query.edit_message_text(
-        "🔧 <b>Настройки доступа</b>\n\n"
-        "Управление разрешениями пользователей:",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def user_stats_menu(update: Update, context: CallbackContext):
-    """Меню статистики пользователей"""
-    query = update.callback_query
-    user_id = update.effective_user.id
-    
-    if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
+        await query.answer(_("notifications.access_denied", user_id))
         return
     
     await query.answer()
     
     try:
-        from ...utils.config_utils import load_users
-        from ...database.database_manager import get_all_records
+        from ...database.database_manager import get_db_stats, get_all_records
+        from datetime import datetime, timedelta
         
-        users = load_users()
+        # Получаем общую статистику
+        stats = get_db_stats()
         all_records = get_all_records()
         
-        # Статистика активности пользователей
-        user_activity = {}
+        # Статистика за последние периоды
+        now = datetime.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = now - timedelta(days=7)
+        month_start = now - timedelta(days=30)
+        
+        today_records = [r for r in all_records if safe_parse_date(r.get('date', '')) >= today_start]
+        week_records = [r for r in all_records if safe_parse_date(r.get('date', '')) >= week_start]
+        month_records = [r for r in all_records if safe_parse_date(r.get('date', '')) >= month_start]
+        
+        # Суммы по периодам
+        today_amount = sum(r.get('amount', 0) for r in today_records)
+        week_amount = sum(r.get('amount', 0) for r in week_records)
+        month_amount = sum(r.get('amount', 0) for r in month_records)
+        
+        # Топ поставщиков
+        supplier_stats = {}
         for record in all_records:
-            supplier = record.get('supplier', 'Неизвестно')
-            if supplier not in user_activity:
-                user_activity[supplier] = {'count': 0, 'amount': 0}
-            user_activity[supplier]['count'] += 1
-            user_activity[supplier]['amount'] += record.get('amount', 0)
+            supplier = record.get('supplier', _('users.unknown', user_id))
+            supplier_stats[supplier] = supplier_stats.get(supplier, 0) + record.get('amount', 0)
         
-        # Топ активных пользователей
-        top_users = sorted(user_activity.items(), key=lambda x: x[1]['count'], reverse=True)[:5]
-        
-        stats_text = f"📊 <b>Статистика пользователей</b>\n\n"
-        stats_text += f"👥 Всего пользователей: {len(users)}\n"
-        stats_text += f"📝 Активных поставщиков: {len(user_activity)}\n"
-        stats_text += f"📋 Всего записей: {len(all_records)}\n\n"
-        stats_text += f"🏆 Топ активных пользователей:\n"
-        
-        for i, (supplier, stats) in enumerate(top_users, 1):
-            stats_text += f"{i}. {supplier}: {stats['count']} գրառում\n"
+        top_suppliers = sorted(supplier_stats.items(), key=lambda x: x[1], reverse=True)[:5]
         
         keyboard = [
-            [InlineKeyboardButton("🔄 Обновить", callback_data="user_stats")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]
+            [InlineKeyboardButton(_("analytics.export", user_id), callback_data="export_general_analytics")],
+            [InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]
         ]
         
+        analytics_text = (
+            f"📊 <b>{_('analytics.general', user_id)}</b>\n\n"
+            f"🔄 {_('analytics.activity', user_id)}\n"
+            f"• Сегодня: {len(today_records)} записей ({today_amount:,.2f} դր.)\n"
+            f"• За неделю: {len(week_records)} записей ({week_amount:,.2f} դր.)\n"
+            f"• За месяц: {len(month_records)} գրառում ({month_amount:,.2f} դր.)\n\n"
+            f"🏆 {_('analytics.top_users', user_id)}\n"
+        )
+        
+        for i, (supplier, amount) in enumerate(top_suppliers, 1):
+            analytics_text += f"{i}. {supplier}: {amount:,.2f} դր.\n"
+        
         await query.edit_message_text(
-            stats_text,
+            analytics_text,
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
     except Exception as e:
-        logger.error(f"Ошибка в user_stats_menu: {e}")
-        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]]
+        logger.error(f"Ошибка в general_analytics_handler: {e}")
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]]
         await query.edit_message_text(
-            f"❌ <b>Ошибка</b>\n\n<code>{str(e)}</code>",
+            f"❌ <b>{_('notifications.error', user_id)}</b>\n\n<code>{str(e)}</code>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-# Заглушки для всех остальных недостающих функций
-async def add_admin_handler(update: Update, context: CallbackContext):
-    """Заглушка для добавления админа"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]])
-    )
-
-async def remove_admin_handler(update: Update, context: CallbackContext):
-    """Заглушка для удаления админа"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]])
-    )
-
-async def show_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для показа аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def select_backup_handler(update: Update, context: CallbackContext):
-    """Заглушка для выбора резервной копии"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="backup_menu")]])
-    )
-
-async def confirm_restore_handler(update: Update, context: CallbackContext):
-    """Заглушка для подтверждения восстановления"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="backup_menu")]])
-    )
-
-async def confirm_cleanup_handler(update: Update, context: CallbackContext):
-    """Заглушка для подтверждения очистки"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="backup_menu")]])
-    )
-
-async def export_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для экспорта аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def export_user_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для экспорта пользовательской аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def export_financial_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для экспорта финансовой аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def export_period_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для экспорта периодической аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def export_general_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для экспорта общей аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def show_unauthorized_users_handler(update: Update, context: CallbackContext):
-    """Показывает неавторизованных пользователей"""
-    query = update.callback_query
-    user_id = update.effective_user.id
-    
-    if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
-        return
-    
-    await query.answer()
-    
-    keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]]
-    await query.edit_message_text(
-        "❌ <b>Неавторизованные пользователи</b>\n\n"
-        "⚠️ Функция в разработке\n\n"
-        "Будет показывать пользователей, которые пытались получить доступ к боту, но не были авторизованы.",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def general_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для общей аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
 async def user_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для пользовательской аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def financial_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для финансовой аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def period_analytics_handler(update: Update, context: CallbackContext):
-    """Заглушка для периодической аналитики"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="analytics_menu")]])
-    )
-
-async def show_authorized_users_handler(update: Update, context: CallbackContext):
-    """Показывает список авторизованных пользователей"""
+    """Обработчик пользовательской аналитики"""
     query = update.callback_query
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
+        await query.answer(_("notifications.access_denied", user_id))
         return
     
     await query.answer()
     
     try:
-        import json
-        import os
+        from ...database.database_manager import get_all_records
+        from ...utils.config_utils import load_users
         
-        # Загружаем список разрешенных пользователей
-        allowed_users_path = os.path.join("data", "allowed_users.json")
-        try:
-            with open(allowed_users_path, 'r', encoding='utf-8') as f:
-                allowed_users = json.load(f)
-        except FileNotFoundError:
-            allowed_users = []
+        all_records = get_all_records()
+        users = load_users()
         
-        if not allowed_users:
-            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]]
+        # Статистика по пользователям
+        user_stats = {}
+        for record in all_records:
+            supplier = record.get('supplier', _('users.unknown', user_id))
+            if supplier not in user_stats:
+                user_stats[supplier] = {'count': 0, 'amount': 0}
+            user_stats[supplier]['count'] += 1
+            user_stats[supplier]['amount'] += record.get('amount', 0)
+        
+        # Топ пользователей по количеству записей
+        top_by_count = sorted(user_stats.items(), key=lambda x: x[1]['count'], reverse=True)[:5]
+        
+        # Топ пользователей по сумме
+        top_by_amount = sorted(user_stats.items(), key=lambda x: x[1]['amount'], reverse=True)[:5]
+        
+        keyboard = [
+            [InlineKeyboardButton(_("analytics.export", user_id), callback_data="export_user_analytics")],
+            [InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]
+        ]
+        
+        analytics_text = (
+            f"👥 <b>{_('analytics.users', user_id)}</b>\n\n"
+            f"📊 {_('users.total_users', user_id)} {len(users)}\n"
+            f"📝 Активных поставщиков: {len(user_stats)}\n\n"
+            f"🏆 {_('analytics.top_users', user_id)} (по записям):\n"
+        )
+        
+        for i, (supplier, stats) in enumerate(top_by_count, 1):
+            analytics_text += f"{i}. {supplier}: {stats['count']} записей\n"
+        
+        analytics_text += f"\n💰 {_('analytics.top_users', user_id)} (по сумме):\n"
+        
+        for i, (supplier, stats) in enumerate(top_by_amount, 1):
+            analytics_text += f"{i}. {supplier}: {stats['amount']:,.2f} դր.\n"
+        
+        await query.edit_message_text(
+            analytics_text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка в user_analytics_handler: {e}")
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]]
+        await query.edit_message_text(
+            f"❌ <b>{_('notifications.error', user_id)}</b>\n\n<code>{str(e)}</code>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def financial_analytics_handler(update: Update, context: CallbackContext):
+    """Обработчик финансовой аналитики"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer(_("notifications.access_denied", user_id))
+        return
+    
+    await query.answer()
+    
+    try:
+        from ...database.database_manager import get_all_records
+        from datetime import datetime, timedelta
+        
+        all_records = get_all_records()
+        
+        if not all_records:
+            keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]]
             await query.edit_message_text(
-                "✅ <b>Авторизованные пользователи</b>\n\n"
-                "📊 Авторизованных пользователей нет",
+                f"💰 <b>{_('analytics.financial', user_id)}</b>\n\n"
+                f"📊 {_('users.no_users_found', user_id)}",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
         
-        users_text = f"✅ <b>Авторизованные пользователи</b>\n\n"
-        users_text += f"👥 Всего: {len(allowed_users)}\n\n"
+        # Общие финансовые показатели
+        total_amount = sum(r.get('amount', 0) for r in all_records)
+        avg_amount = total_amount / len(all_records) if all_records else 0
+        max_amount = max(r.get('amount', 0) for r in all_records)
+        min_amount = min(r.get('amount', 0) for r in all_records)
         
-        for i, user_id_int in enumerate(allowed_users[:10], 1):
-            is_admin = user_id_int in ADMIN_IDS
-            admin_badge = "👑" if is_admin else "👤"
-            users_text += f"{i}. {admin_badge} <code>{user_id_int}</code>\n"
+        # Анализ по периодам
+        now = datetime.now()
+        periods = {
+            'today': now.replace(hour=0, minute=0, second=0, microsecond=0),
+            'week': now - timedelta(days=7),
+            'month': now - timedelta(days=30)
+        }
         
-        if len(allowed_users) > 10:
-            users_text += f"\n... и еще {len(allowed_users) - 10} пользователей"
+        period_stats = {}
+        for period_name, start_date in periods.items():
+            period_records = [r for r in all_records 
+                             if safe_parse_date(r.get('date', '')) >= start_date]
+            period_stats[period_name] = {
+                'count': len(period_records),
+                'amount': sum(r.get('amount', 0) for r in period_records),
+                'avg': sum(r.get('amount', 0) for r in period_records) / len(period_records) if period_records else 0
+            }
+        
+        # Анализ по направлениям
+        direction_stats = {}
+        for record in all_records:
+            direction = record.get('direction', _('users.not_specified', user_id))
+            if direction not in direction_stats:
+                direction_stats[direction] = {'count': 0, 'amount': 0}
+            direction_stats[direction]['count'] += 1
+            direction_stats[direction]['amount'] += record.get('amount', 0)
+        
+        top_directions = sorted(direction_stats.items(), key=lambda x: x[1]['amount'], reverse=True)[:5]
         
         keyboard = [
-            [InlineKeyboardButton("🔄 Обновить", callback_data="show_authorized_users")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]
+            [InlineKeyboardButton(_("analytics.export", user_id), callback_data="export_financial_analytics")],
+            [InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]
         ]
         
+        analytics_text = (
+            f"💰 <b>{_('analytics.financial', user_id)}</b>\n\n"
+            f"📊 {_('analytics.general_stats', user_id)}\n"
+            f"• Общая сумма: {total_amount:,.2f} դր.\n"
+            f"• Средняя сумма: {avg_amount:,.2f} դր.\n"
+            f"• Максимум: {max_amount:,.2f} դր.\n"
+            f"• Минимум: {min_amount:,.2f} դր.\n\n"
+            f"📈 {_('analytics.trends', user_id)}\n"
+            f"• Сегодня: {period_stats['today']['amount']:,.2f} դր. ({period_stats['today']['count']} записей)\n"
+            f"• За неделю: {period_stats['week']['amount']:,.2f} դր. ({period_stats['week']['count']} записей)\n"
+            f"• За месяц: {period_stats['month']['amount']:,.2f} դր. ({period_stats['month']['count']} записей)\n\n"
+            f"💳 {_('analytics.categories', user_id)}\n"
+        )
+        
+        for i, (direction, stats) in enumerate(top_directions, 1):
+            analytics_text += f"{i}. {direction}: {stats['amount']:,.2f} դր. ({stats['count']} записей)\n"
+        
         await query.edit_message_text(
-            users_text,
+            analytics_text,
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
     except Exception as e:
-        logger.error(f"Ошибка в show_authorized_users_handler: {e}")
-        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]]
+        logger.error(f"Ошибка в financial_analytics_handler: {e}")
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]]
         await query.edit_message_text(
-            f"❌ <b>Ошибка</b>\n\n<code>{str(e)}</code>",
+            f"❌ <b>{_('notifications.error', user_id)}</b>\n\n<code>{str(e)}</code>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-async def add_permissions_handler(update: Update, context: CallbackContext):
-    """Заглушка для добавления разрешений"""
+async def period_analytics_handler(update: Update, context: CallbackContext):
+    """Обработчик аналитики по периодам"""
     query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]])
-    )
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer(_("notifications.access_denied", user_id))
+        return
+    
+    await query.answer()
+    
+    try:
+        from ...database.database_manager import get_all_records
+        from datetime import datetime, timedelta
+        from collections import defaultdict
+        
+        all_records = get_all_records()
+        
+        if not all_records:
+            keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]]
+            await query.edit_message_text(
+                f"📅 <b>{_('analytics.periods', user_id)}</b>\n\n"
+                f"📊 {_('users.no_users_found', user_id)}",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+        
+        # Группировка по дням за последние 7 дней
+        now = datetime.now()
+        daily_stats = defaultdict(lambda: {'count': 0, 'amount': 0})
+        
+        for i in range(7):
+            date = (now - timedelta(days=i)).strftime('%Y-%m-%d')
+            daily_stats[date] = {'count': 0, 'amount': 0}
+        
+        # Анализ записей по дням
+        for record in all_records:
+            record_date_str = record.get('date', '')
+            if record_date_str and len(record_date_str) >= 10:
+                record_date = record_date_str[:10]  # Берем только дату без времени
+                if record_date in daily_stats:
+                    daily_stats[record_date]['count'] += 1
+                    daily_stats[record_date]['amount'] += record.get('amount', 0)
+        
+        # Группировка по месяцам за последние 6 месяцев
+        monthly_stats = defaultdict(lambda: {'count': 0, 'amount': 0})
+        
+        for i in range(6):
+            date = (now - timedelta(days=30*i))
+            month_key = date.strftime('%Y-%m')
+            monthly_stats[month_key] = {'count': 0, 'amount': 0}
+        
+        for record in all_records:
+            record_date_str = record.get('date', '')
+            if record_date_str and len(record_date_str) >= 7:
+                record_date = record_date_str[:7]  # YYYY-MM
+                if record_date in monthly_stats:
+                    monthly_stats[record_date]['count'] += 1
+                    monthly_stats[record_date]['amount'] += record.get('amount', 0)
+        
+        keyboard = [
+            [InlineKeyboardButton(_("analytics.export", user_id), callback_data="export_period_analytics")],
+            [InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]
+        ]
+        
+        # Формируем текст аналитики
+        analytics_text = f"📅 <b>{_('analytics.periods', user_id)}</b>\n\n"
+        
+        # Статистика по дням
+        analytics_text += "📊 Последние 7 дней:\n"
+        sorted_daily = sorted(daily_stats.items(), reverse=True)[:7]
+        for date, stats in sorted_daily:
+            try:
+                formatted_date = datetime.strptime(date, '%Y-%m-%d').strftime('%d.%m')
+            except:
+                formatted_date = date[-5:]  # MM-DD
+            analytics_text += f"• {formatted_date}: {stats['count']} записей, {stats['amount']:,.0f} դր.\n"
+        
+        # Статистика по месяцам
+        analytics_text += "\n📅 Последние 6 месяцев:\n"
+        sorted_monthly = sorted(monthly_stats.items(), reverse=True)[:6]
+        for month, stats in sorted_monthly:
+            try:
+                formatted_month = datetime.strptime(f"{month}-01", '%Y-%m-%d').strftime('%m.%Y')
+            except:
+                formatted_month = month
+            analytics_text += f"• {formatted_month}: {stats['count']} записей, {stats['amount']:,.0f} դր.\n"
+        
+        await query.edit_message_text(
+            analytics_text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка в period_analytics_handler: {e}")
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="analytics_menu")]]
+        await query.edit_message_text(
+            f"❌ <b>{_('notifications.error', user_id)}</b>\n\n<code>{str(e)}</code>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
-async def remove_permissions_handler(update: Update, context: CallbackContext):
-    """Заглушка для удаления разрешений"""
+async def show_sheet_selection_for_add_record(update: Update, context: CallbackContext, record_type: str):
+    """Показывает выбор листа для добавления записи"""
     query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]])
-    )
+    user_id = update.effective_user.id
+    
+    # Получаем настройки пользователя
+    user_settings = get_user_settings(user_id)
+    spreadsheet_id = user_settings.get('active_spreadsheet_id')
+    
+    if not spreadsheet_id:
+        await query.edit_message_text(
+            "❌ Նախ պետք է ընտրել աղյուսակը",
+            reply_markup=create_back_to_menu_keyboard()
+        )
+        return
+    
+    try:
+        sheets_info, spreadsheet_title = get_cached_sheets_info(spreadsheet_id)
+        
+        if not sheets_info:
+            await query.edit_message_text(
+                "❌ Աղյուսակում թերթիկներ չկան",
+                reply_markup=create_back_to_menu_keyboard()
+            )
+            return
+        
+        keyboard = create_add_record_sheet_selection(sheets_info, record_type)
+        
+        record_text = "գրառում" if record_type == "record" else "բացթողում"
+        await query.edit_message_text(
+            f"📋 Ընտրեք թերթիկը {record_text}-ի համար:\n\n"
+            f"📊 Աղյուսակ: <b>{spreadsheet_title}</b>",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+        
+    except Exception as e:
+        await query.edit_message_text(
+            f"❌ Շխալ թերթիկների ցանկը ստանալու ժամանակ: {e}",
+            reply_markup=create_back_to_menu_keyboard()
+        )
 
-async def authorize_user_handler(update: Update, context: CallbackContext):
-    """Заглушка для авторизации пользователя"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]])
-    )
 
-async def revoke_user_handler(update: Update, context: CallbackContext):
-    """Заглушка для отзыва прав пользователя"""
-    query = update.callback_query
-    await query.edit_message_text(
-        "⚠️ Функция в разработке",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]])
-    )
 
-# Недостающие функции для управления пользователями
+# Заглушки для остальных функций
 async def user_list(update: Update, context: CallbackContext):
     """Показывает список пользователей"""
     query = update.callback_query
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
+        await query.answer(_("notifications.access_denied", user_id))
         return
     
     await query.answer()
     
     try:
-        # Загружаем список авторизованных пользователей
-        allowed_users_path = os.path.join("data", "allowed_users.json")
-        try:
-            with open(allowed_users_path, 'r', encoding='utf-8') as f:
-                allowed_users = json.load(f)
-        except FileNotFoundError:
-            allowed_users = []
+        from ...utils.config_utils import load_users
+        users = load_users()
         
-        # Загружаем информацию о пользователях
-        users_path = os.path.join("data", "users.json")
-        try:
-            with open(users_path, 'r', encoding='utf-8') as f:
-                users_data = json.load(f)
-        except FileNotFoundError:
-            users_data = {}
-        
-        if not allowed_users:
-            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]]
+        if not users:
+            keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="users_management_menu")]]
             await query.edit_message_text(
-                "👥 <b>Список пользователей</b>\n\n"
-                "📊 Авторизованных пользователей не найдено",
+                f"👥 <b>Список пользователей</b>\n\n"
+                f"📊 Пользователи не найдены",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
         
-        users_text = f"👥 <b>Список пользователей</b>\n\n"
-        users_text += f"Всего авторизованных: {len(allowed_users)}\n\n"
+        # Формируем список пользователей
+        user_list_text = f"👥 <b>Список пользователей</b>\n\n"
+        user_list_text += f"📊 Всего пользователей: {len(users)}\n\n"
         
-        # Показываем только первых 10 пользователей
-        users_to_show = allowed_users[:10] if len(allowed_users) > 10 else allowed_users
+        # Показываем первых 10 пользователей
+        for i, (user_id_str, user_data) in enumerate(list(users.items())[:10], 1):
+            display_name = user_data.get('display_name', 'Не указано')
+            language = user_data.get('language', 'hy')
+            is_admin = int(user_id_str) in ADMIN_IDS
+            
+            admin_badge = "👑" if is_admin else "👤"
+            user_list_text += f"{i}. {admin_badge} <b>{display_name}</b>\n"
+            user_list_text += f"   ID: <code>{user_id_str}</code>\n"
+            user_list_text += f"   🌐 {language.upper()}\n"
+            if user_data.get('active_spreadsheet_id'):
+                user_list_text += f"   📊 Подключен к таблице\n"
+            user_list_text += "\n"
         
-        for i, user_id_int in enumerate(users_to_show, 1):
-            user_info = f"{i}. ID: <code>{user_id_int}</code>"
-            
-            # Проверяем, есть ли дополнительная информация о пользователе
-            if str(user_id_int) in users_data:
-                user_data = users_data[str(user_id_int)]
-                if user_data.get('display_name'):
-                    user_info += f" - {user_data['display_name']}"
-            
-            # Отмечаем админов
-            if user_id_int in ADMIN_IDS:
-                user_info += " 👑"
-            
-            users_text += f"{user_info}\n"
-        
-        if len(allowed_users) > 10:
-            users_text += f"\n... и еще {len(allowed_users) - 10} пользователей"
+        if len(users) > 10:
+            user_list_text += f"... и еще {len(users) - 10} пользователей\n"
         
         keyboard = [
-            [InlineKeyboardButton("🔄 Обновить", callback_data="user_list")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]
+            [InlineKeyboardButton("🔄 Обновить список", callback_data="user_list")],
+            [InlineKeyboardButton(_("menu.back", user_id), callback_data="users_management_menu")]
         ]
         
         await query.edit_message_text(
-            users_text,
+            user_list_text,
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
     except Exception as e:
         logger.error(f"Ошибка в user_list: {e}")
-        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]]
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="users_management_menu")]]
         await query.edit_message_text(
             f"❌ <b>Ошибка</b>\n\n<code>{str(e)}</code>",
             parse_mode="HTML",
@@ -1750,22 +1705,52 @@ async def add_user(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
+        await query.answer(_("notifications.access_denied", user_id))
         return
     
     await query.answer()
     
-    keyboard = [
-        [InlineKeyboardButton("➕ Добавить по ID", callback_data="add_user_by_id")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]
-    ]
-    
-    await query.edit_message_text(
-        "➕ <b>Добавление пользователя</b>\n\n"
-        "Выберите способ добавления пользователя:",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    try:
+        from ...utils.config_utils import load_users, save_users
+        import json
+        import os
+        
+        # Загружаем список разрешенных пользователей
+        allowed_users_path = os.path.join("data", "allowed_users.json")
+        try:
+            with open(allowed_users_path, 'r', encoding='utf-8') as f:
+                allowed_users = json.load(f)
+        except FileNotFoundError:
+            allowed_users = []
+        
+        users = load_users()
+        
+        # Показываем форму для добавления пользователя
+        keyboard = [
+            [InlineKeyboardButton("📝 Добавить по ID", callback_data="add_user_by_id")],
+            [InlineKeyboardButton("📋 Показать неавторизованных", callback_data="show_unauthorized_users")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="users_management_menu")]
+        ]
+        
+        stats_text = f"➕ <b>Добавление пользователя</b>\n\n"
+        stats_text += f"👥 Зарегистрированных пользователей: {len(users)}\n"
+        stats_text += f"✅ Авторизованных пользователей: {len(allowed_users)}\n\n"
+        stats_text += f"Выберите способ добавления пользователя:"
+        
+        await query.edit_message_text(
+            stats_text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка в add_user: {e}")
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="users_management_menu")]]
+        await query.edit_message_text(
+            f"❌ <b>Ошибка</b>\n\n<code>{str(e)}</code>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 async def add_user_by_id_handler(update: Update, context: CallbackContext):
     """Добавление пользователя по ID"""
@@ -1773,201 +1758,70 @@ async def add_user_by_id_handler(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
+        await query.answer(_("notifications.access_denied", user_id))
         return
     
     await query.answer()
     
-    # Устанавливаем состояние ожидания ввода ID
-    context.user_data['waiting_for_user_id'] = True
-    context.user_data['message_to_edit'] = query.message
-    
-    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_user")]]
-    
+    keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="add_user")]]
     await query.edit_message_text(
-        "➕ <b>Добавление пользователя по ID</b>\n\n"
-        "📝 Введите ID пользователя (только цифры):\n\n"
-        "💡 <i>Пример: 123456789</i>\n\n"
-        "ℹ️ ID можно получить из настроек Telegram կամ խնդրել օգտվողին ուղարկել /start հրահանգը բոտին",
+        f"📝 <b>Добавление пользователя по ID</b>\n\n"
+        f"Отправьте ID пользователя для добавления в список разрешенных.\n"
+        f"ID должен быть числом (например: 123456789)\n\n"
+        f"💡 Чтобы узнать ID пользователя, попросите его написать боту /start",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+    
+    # Устанавливаем состояние ожидания ID
+    context.user_data['waiting_for_user_id'] = True
 
-async def cancel_add_user_handler(update: Update, context: CallbackContext):
-    """Отмена добавления пользователя"""
+async def show_unauthorized_users_handler(update: Update, context: CallbackContext):
+    """Показывает список неавторизованных пользователей"""
     query = update.callback_query
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer(_("notifications.access_denied", user_id))
+        return
+    
     await query.answer()
     
-    # Очищаем состояние
-    context.user_data.pop('waiting_for_user_id', None)
-    context.user_data.pop('message_to_edit', None)
-    
-    # Возвращаемся к меню добавления пользователя
-    await add_user(update, context)
-
-async def add_user_id_to_allowed(user_id_to_add: int) -> bool:
-    """Добавляет пользователя в список разрешенных"""
     try:
-        allowed_users_path = os.path.join("data", "allowed_users.json")
+        from ...utils.config_utils import load_users
+        import json
+        import os
         
-        # Загружаем текущий список
+        # Загружаем список разрешенных пользователей
+        allowed_users_path = os.path.join("data", "allowed_users.json")
         try:
             with open(allowed_users_path, 'r', encoding='utf-8') as f:
                 allowed_users = json.load(f)
         except FileNotFoundError:
             allowed_users = []
         
-        # Проверяем, не добавлен ли уже пользователь
-        if user_id_to_add in allowed_users:
-            return False  # Пользователь уже добавлен
+        users = load_users()
+        unauthorized_users = []
         
-        # Добавляем пользователя
-        allowed_users.append(user_id_to_add)
+        for uid, udata in users.items():
+            if int(uid) not in allowed_users:
+                unauthorized_users.append((uid, udata.get('display_name', 'Неизвестный')))
         
-        # Сохраняем обновленный список
-        os.makedirs(os.path.dirname(allowed_users_path), exist_ok=True)
-        with open(allowed_users_path, 'w', encoding='utf-8') as f:
-            json.dump(allowed_users, f, ensure_ascii=False, indent=2)
+        if not unauthorized_users:
+            text = f"❌ <b>Неавտորիզված օգտվողներ</b>\n\n✅ Բոլոր օգտվողները ունեն մուտք բոտը: "
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]]
+        else:
+            text = f"❌ <b>Неавտորիզված օգտվողներ</b>\n\n"
+            text += f"Նայված {len(unauthorized_users)} օգտվողների:\n\n"
+            
+            for i, (uid, name) in enumerate(unauthorized_users[:10], 1):
+                text += f"{i}. <b>{name}</b>\n"
+                text += f"   ID: <code>{uid}</code>\n"
+                text += f"   👤 Ավելացնել: /authorize_{uid}\n\n"
+            
+            if len(unauthorized_users) > 10:
+                text += f"... և ևս {len(unauthorized_users) - 10} օգտվողների"
         
-        return True
-        
-    except Exception as e:
-        logger.error(f"Ошибка при добавлении пользователя {user_id_to_add}: {e}")
-        return False
-
-async def handle_user_id_input(update: Update, context: CallbackContext):
-    """Обрабатывает ввод ID пользователя"""
-    # Проверяем, ожидаем ли мы ввод ID пользователя
-    if not context.user_data.get('waiting_for_user_id'):
-        return
-    
-    user_id = update.effective_user.id
-    
-    if user_id not in ADMIN_IDS:
-        return
-    
-    message_text = update.message.text.strip()
-    message_to_edit = context.user_data.get('message_to_edit')
-    
-    # Очищаем состояние
-    context.user_data.pop('waiting_for_user_id', None)
-    context.user_data.pop('message_to_edit', None)
-    
-    # Удаляем сообщение пользователя
-    try:
-        await update.message.delete()
-    except:
-        pass
-    
-    # Проверяем, что введен корректный ID
-    try:
-        user_id_to_add = int(message_text)
-        if user_id_to_add <= 0:
-            raise ValueError("ID должен быть положительным числом")
-    except ValueError:
-        keyboard = [[InlineKeyboardButton("🔄 Попробовать снова", callback_data="add_user_by_id")],
-                   [InlineKeyboardButton("⬅️ Назад", callback_data="add_user")]]
-        
-        if message_to_edit:
-            await message_to_edit.edit_text(
-                "❌ <b>Ошибка ввода</b>\n\n"
-                "📝 ID пользователя должен содержать только цифры\n\n"
-                "💡 <i>Пример правильного ID: 123456789</i>",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        return
-    
-    # Проверяем, не пытается ли админ добавить самого себя
-    if user_id_to_add == user_id:
-        keyboard = [[InlineKeyboardButton("🔄 Попробовать снова", callback_data="add_user_by_id")],
-                   [InlineKeyboardButton("⬅️ Назад", callback_data="add_user")]]
-        
-        if message_to_edit:
-            await message_to_edit.edit_text(
-                "⚠️ <b>Предупреждение</b>\n\n"
-                "Вы не можете добавить самого себя - вы уже являетесь администратором",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        return
-    
-    # Добавляем пользователя
-    if add_user_id_to_allowed(user_id_to_add):
         keyboard = [
-            [InlineKeyboardButton("➕ Добавить еще", callback_data="add_user_by_id")],
-            [InlineKeyboardButton("👥 Список пользователей", callback_data="user_list")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="add_user")]
-        ]
-        
-        if message_to_edit:
-            await message_to_edit.edit_text(
-                f"✅ <b>Пользователь добавлен</b>\n\n"
-                f"👤 ID: <code>{user_id_to_add}</code>\n\n"
-                f"✔️ Пользователь теперь может использовать бота\n"
-                f"📝 Он получит доступ при следующем обращении к боту",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-    else:
-        keyboard = [[InlineKeyboardButton("🔄 Попробовать снова", callback_data="add_user_by_id")],
-                   [InlineKeyboardButton("⬅️ Назад", callback_data="add_user")]]
-        
-        if message_to_edit:
-            await message_to_edit.edit_text(
-                f"⚠️ <b>Пользователь уже добавлен</b>\n\n"
-                f"👤 ID: <code>{user_id_to_add}</code>\n\n"
-                f"ℹ️ Этот пользователь уже имеет доступ к боту",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-
-async def conversation_fallback_handler(update: Update, context: CallbackContext):
-    """Fallback handler для ConversationHandler - завершает диалог и возвращает в главное меню"""
-    query = update.callback_query
-    user_id = update.effective_user.id
-    
-    if not is_user_allowed(user_id):
-        await query.answer("❌ Մուտքն արգելված է")
-        return ConversationHandler.END
-    
-    await query.answer()
-    
-    data = query.data
-    logger.info(f"ConversationHandler fallback: {data} от пользователя {user_id}")
-    
-    # Только для кнопок возврата в меню - завершаем диалог
-    if data in ["back_to_menu", "main_menu"]:
-        # Очищаем только данные диалога, но не все user_data
-        context.user_data.pop('record', None)
-        context.user_data.pop('payment', None)
-        context.user_data.pop('selected_sheet_name', None)
-        
-        await query.edit_message_text(
-            "📋 Հիմնական ընտրացանկ:",
-            reply_markup=create_main_menu(user_id)
-        )
-        return ConversationHandler.END
-    
-    # Для других кнопок меню - завершаем ConversationHandler и передаем в button_handler
-    menu_actions = [
-        "add_record_menu", "add_record_select_sheet", "add_skip_record_select_sheet",
-        "select_spreadsheet", "select_sheet_menu", "settings_menu",
-        "analytics_menu", "backup_menu", "workers_menu", "pay_menu", "my_payments"
-    ]
-    
-    if data in menu_actions or data.startswith(("spreadsheet_", "sheet_", "final_sheet_")):
-        # Очищаем только данные диалога
-        context.user_data.pop('record', None)
-        context.user_data.pop('payment', None)
-        context.user_data.pop('selected_sheet_name', None)
-        
-        logger.info(f"Завершение ConversationHandler и переход к button_handler для: {data}")
-        
-        # Имитируем новый callback для button_handler
-        await button_handler(update, context)
-        return ConversationHandler.END
-    
-    # Для всех остальных callback'ов - просто завершаем ConversationHandler
-    logger.info(f"Неизвестный callback в ConversationHandler fallback: {data}")
-    return ConversationHandler.END
+            [InlineKeyboardButton("🔄 Обновить", callback_data="show_unauthorized_users")],
+            [InlineKeyboardButton("

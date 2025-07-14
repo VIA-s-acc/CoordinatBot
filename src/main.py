@@ -88,8 +88,24 @@ def main():
         application.add_handler(CommandHandler("sync_sheets", sync_sheets_command))
         application.add_handler(CommandHandler("initialize_sheets", initialize_sheets_command))
         
+        # Отдельные обработчики для специфичных callback'ов (должны быть ДО общего button_handler)
+        from src.bot.handlers.edit_handlers import confirm_delete, cancel_edit
+        logger.info("Регистрируем handlers для confirm_delete_ и cancel_edit_")
+        
+        # Тестируем, что функции импортированы правильно
+        logger.info(f"confirm_delete функция: {confirm_delete}")
+        logger.info(f"cancel_edit функция: {cancel_edit}")
+        
+        application.add_handler(CallbackQueryHandler(confirm_delete, pattern=r"^confirm_delete_"))
+        application.add_handler(CallbackQueryHandler(cancel_edit, pattern=r"^cancel_edit_"))
+        logger.info("Handlers для confirm_delete_ и cancel_edit_ зарегистрированы")
+        
         # Регистрация обработчика кнопок (должен быть после ConversationHandler'ов)
-        application.add_handler(CallbackQueryHandler(button_handler))
+        # Исключаем callback'и, которые должны обрабатываться ConversationHandler'ами
+        application.add_handler(CallbackQueryHandler(
+            button_handler, 
+            pattern=r"^(?!add_record_sheet_|add_skip_sheet_|add_record_select_sheet$|use_my_name$|use_firm_name$|manual_input$|edit_record_|confirm_delete_|cancel_edit_|add_payment_|confirm_payment_).*"
+        ))
         
         # Регистрация обработчиков сообщений
         application.add_handler(MessageHandler(filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, text_menu_handler))

@@ -15,6 +15,7 @@ from ...utils.formatting import format_record_info
 from ...database.database_manager import add_record_to_db
 from ...google_integration.sheets_manager import add_record_to_sheet
 from ...utils.report_manager import send_report
+from ..handlers.translation_handlers import _
 
 logger = logging.getLogger(__name__)
 
@@ -23,21 +24,51 @@ async def start_add_record(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = update.effective_user.id
     
+    logger.info(f"start_add_record вызвана для пользователя {user_id}, callback_data: {query.data}")
+    
     if not is_user_allowed(user_id):
-        await query.edit_message_text("❌ Ձեր մուտքն արգելված է:")
+        await query.edit_message_text("❌ Ваш доступ запрещен:")
         return ConversationHandler.END
-          
+    
+    # Очищаем только данные записи, сохраняя другие настройки
+    context.user_data.pop('record', None)
+    
+    # Получаем имя листа из callback_data
+    if query.data and query.data.startswith("add_record_sheet_"):
+        sheet_name = query.data.replace("add_record_sheet_", "")
+        logger.info(f"Извлечено имя листа: {sheet_name}")
+        # Сохраняем имя листа в context.user_data
+        context.user_data['selected_sheet_name'] = sheet_name
+    else:
+        # Попытаемся получить из context.user_data
+        sheet_name = context.user_data.get('selected_sheet_name')
+        logger.warning(f"Имя листа не найдено в callback_data, получено из context: {sheet_name}")
+    
+    if not sheet_name:
+        # Если лист не выбран, показываем сообщение об ошибке и возвращаем в меню
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="add_record_menu")]]
+        await query.edit_message_text(
+            "❌ Պետք է նախ ընտրել թերթիկը:\n"
+            "Կտտացնեք \"➕ Ավելացնել գրառում\" և ընտրեք թերթիկ",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ConversationHandler.END
+    
     # Получаем настройки пользователя
     user_settings = get_user_settings(user_id)
     
     # Проверяем настройки
-    if not user_settings.get('active_spreadsheet_id') or not user_settings.get('active_sheet_name'):
-        keyboard = [[InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]]
+    if not user_settings.get('active_spreadsheet_id'):
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="back_to_menu")]]
         await query.edit_message_text(
-            "❌ Նախ պետք է ընտրել թերթիկ աշխատելու համար:\n"
-            "Օգտագործեք 📋 Ընտրել թերթիկ",
-            reply_markup=InlineKeyboardMarkup(keyboard))
+            "❌ Նախ պետք է ընտրել աղյուսակը:\n"
+            "Օգտագործեք 📊 Ընտրել աղյուսակ",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return ConversationHandler.END
+    
+    # Устанавливаем выбранный лист как активный
+    update_user_settings(user_id, {'active_sheet_name': sheet_name})
     
     # Генерируем ID и устанавливаем текущую дату
     record_id = "cb-" + str(uuid.uuid4())[:8]
@@ -55,12 +86,13 @@ async def start_add_record(update: Update, context: CallbackContext):
     if display_name:
         keyboard.append([InlineKeyboardButton(f"👤 Օգտագործել իմ անունը ({display_name})", callback_data="use_my_name")])
     keyboard.append([InlineKeyboardButton(f"🏢 Օգտագործել Ֆիրմայի անունը", callback_data="use_firm_name")])
-    keyboard.append([InlineKeyboardButton("✏️ Մուտքագրել ձեռքով", callback_data="manual_input")])
+    # keyboard.append([InlineKeyboardButton("✏️ Մուտքագրել ձեռքով", callback_data="manual_input")])
     
     await query.edit_message_text(
         f"➕ Ավելացնել նոր գրառում\n"
         f"🆔 ID: <code>{record_id}</code>\n"
-        f"📅 Ամսաթիվ: <b>{current_date}</b>\n\n"
+        f"📅 Ամսաթիվ: <b>{current_date}</b>\n"
+        f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
         f"🏪 Ընտրեք մատակարարի տեսակը:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -69,25 +101,50 @@ async def start_add_record(update: Update, context: CallbackContext):
     return SUPPLIER_CHOICE
 
 async def start_add_skip_record(update: Update, context: CallbackContext):
-    """Начинает добавление записиpropуска"""
+    """Начинает добавление записи пропуска"""
     query = update.callback_query
     user_id = update.effective_user.id
     
+    # Очищаем только данные записи, сохраняя другие настройки
+    context.user_data.pop('record', None)
+    
     if not is_user_allowed(user_id):
-        await query.edit_message_text("❌ Ձեր մուտքն արգելված է:")
+        await query.edit_message_text("❌ Ваш доступ запрещен:")
         return ConversationHandler.END
 
+    # Получаем имя листа из callback_data
+    if query.data and query.data.startswith("add_skip_sheet_"):
+        sheet_name = query.data.replace("add_skip_sheet_", "")
+        # Сохраняем имя листа в context.user_data
+        context.user_data['selected_sheet_name'] = sheet_name
+    else:
+        # Попытаемся получить из context.user_data
+        sheet_name = context.user_data.get('selected_sheet_name')
+    
+    if not sheet_name:
+        # Если лист не выбран, показываем сообщение об ошибке и возвращаем в меню
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="add_record_menu")]]
+        await query.edit_message_text(
+            "❌ Պետք է նախ ընտրել թերթիկը:\n"
+            "Կտտացնեք \"➕ Ավելացնել բացթողում\" և ընտրեք թերթիկ",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ConversationHandler.END
+    
     # Получаем настройки пользователя
     user_settings = get_user_settings(user_id)
 
     # Проверяем настройки
-    if not user_settings.get('active_spreadsheet_id') or not user_settings.get('active_sheet_name'):
-        keyboard = [[InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]]
+    if not user_settings.get('active_spreadsheet_id'):
+        keyboard = [[InlineKeyboardButton(_("menu.back" , user_id), callback_data="back_to_menu")]]
         await query.edit_message_text(
-            "❌ Նախ պետք է ընտրել թերթիկ աշխատելու համար:\n"
-            "Օգտագործեք 📋 Ընտրել թերթիկ",
+            "❌ Նախ պետք է ընտրել աղյուսակը:\n"
+            "Օգտագործեք � Ընտրել աղյուսակ",
             reply_markup=InlineKeyboardMarkup(keyboard))
         return ConversationHandler.END
+
+    # Устанавливаем выбранный лист как активный
+    update_user_settings(user_id, {'active_sheet_name': sheet_name})
 
     # Генерируем ID
     record_id = "cb-" + str(uuid.uuid4())[:8]
@@ -102,7 +159,8 @@ async def start_add_skip_record(update: Update, context: CallbackContext):
     # Просим ввести дату вручную или отправить "+" для текущей
     await query.edit_message_text(
         f"➕ Ավելացնել Բացթողում\n"
-        f"🆔 ID: <code>{record_id}</code>\n\n"
+        f"🆔 ID: <code>{record_id}</code>\n"
+        f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
         f"📅 Մուտքագրեք ամսաթիվը (YYYY-MM-DD) կամ ուղարկեք <b>+</b>՝ ընթացիկ ամսաթվի համար:",
         parse_mode="HTML"
     )
@@ -139,7 +197,7 @@ async def get_date(update: Update, context: CallbackContext):
     if display_name:
         keyboard.append([InlineKeyboardButton(f"👤 Օգտագործել իմ անունը ({display_name})", callback_data="use_my_name")])
     keyboard.append([InlineKeyboardButton(f"🏢 Օգտագործել Ֆիրմայի անունը", callback_data="use_firm_name")])
-    keyboard.append([InlineKeyboardButton("✏️ Մուտքագրել ձեռքով", callback_data="manual_input")])
+    # keyboard.append([InlineKeyboardButton("✏️ Մուտքագրել ձեռքով", callback_data="manual_input")])
     
     await update.message.reply_text(
         "🏪 Ընտրեք մատակարարի տեսակը:",
@@ -321,10 +379,24 @@ async def cancel_add_record(update: Update, context: CallbackContext):
     if not is_user_allowed(user_id):
         return ConversationHandler.END
     
-    await update.message.reply_text(
-        "❌ Գրառման ավելացման գործողությունը չեղարկված է:",
-        reply_markup=create_main_menu(user_id)
-    )
+    # Обрабатываем как кнопку, так и команду
+    if update.callback_query:
+        # Если это callback от кнопки отмены в процессе редактирования
+        if update.callback_query.data and update.callback_query.data.startswith("cancel_edit_"):
+            record_id = update.callback_query.data.replace("cancel_edit_", "")
+            keyboard = [[InlineKeyboardButton("✏️ Խմբագրել", callback_data=f"edit_record_{record_id}")]]
+            await update.callback_query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.callback_query.edit_message_text(
+                "❌ Գրառման ավելացման գործողությունը չեղարկված է:",
+                reply_markup=create_main_menu(user_id)
+            )
+    else:
+        await update.message.reply_text(
+            "❌ Գրառման ավելացման գործողությունը չեղարկված է:",
+            reply_markup=create_main_menu(user_id)
+        )
+    
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -334,13 +406,96 @@ async def cancel(update: Update, context: CallbackContext):
     if not is_user_allowed(user_id):
         return ConversationHandler.END
     
-    await update.message.reply_text(
-        "❌ Գործողությունը չեղարկված է:",
-        reply_markup=create_main_menu(user_id)
-    )
+    # Обрабатываем как кнопку, так и команду
+    if update.callback_query:
+        # Если это callback от кнопки отмены в процессе редактирования
+        if update.callback_query.data and update.callback_query.data.startswith("cancel_edit_"):
+            record_id = update.callback_query.data.replace("cancel_edit_", "")
+            keyboard = [[InlineKeyboardButton("✏️ Խմբագրել", callback_data=f"edit_record_{record_id}")]]
+            await update.callback_query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.callback_query.edit_message_text(
+                "❌ Գործողությունը չեղարկված է:",
+                reply_markup=create_main_menu(user_id)
+            )
+    else:
+        await update.message.reply_text(
+            "❌ Գործողությունը չեղարկված է:",
+            reply_markup=create_main_menu(user_id)
+        )
     
     # Очищаем данные пользователя
     if context.user_data:
         context.user_data.clear()
     
     return ConversationHandler.END
+
+async def start_record_conversation(update: Update, context: CallbackContext):
+    """Начинает ConversationHandler для добавления записи"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    
+    logger.info(f"start_record_conversation вызвана для пользователя {user_id}")
+    
+    if not is_user_allowed(user_id):
+        await query.edit_message_text("❌ Ваш доступ запрещен:")
+        return ConversationHandler.END
+    
+    await query.answer()
+    
+    # Импортируем здесь, чтобы избежать циклического импорта
+    from .button_handlers import show_sheet_selection_for_add_record
+    
+    # Показываем выбор листа
+    await show_sheet_selection_for_add_record(update, context, "record")
+    
+    # Остаемся в конversation, ожидая выбора листа
+    return ConversationHandler.END  # На самом деле, мы должны ждать следующего callback'а
+
+async def start_record_selection(update: Update, context: CallbackContext):
+    """Начинает выбор листа для добавления записи в ConversationHandler"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    
+    logger.info(f"start_record_selection вызвана для пользователя {user_id}")
+    
+    if not is_user_allowed(user_id):
+        await query.edit_message_text("❌ Ваш доступ запрещен:")
+        return ConversationHandler.END
+    
+    await query.answer()
+    
+    # Импортируем здесь, чтобы избежать циклического импорта
+    from .button_handlers import show_sheet_selection_for_add_record
+    
+    # Показываем выбор листа
+    await show_sheet_selection_for_add_record(update, context, "record")
+    
+    # Остаемся в ConversationHandler, ожидая выбора листа через entry points
+    # Переходим в состояние выбора листа
+    from ..states.conversation_states import SHEET_SELECTION
+    return SHEET_SELECTION
+
+async def start_skip_record_selection(update: Update, context: CallbackContext):
+    """Начинает выбор листа для добавления упущения в ConversationHandler"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    
+    logger.info(f"start_skip_record_selection вызвана для пользователя {user_id}")
+    
+    if not is_user_allowed(user_id):
+        await query.edit_message_text("❌ Ваш доступ запрещен:")
+        return ConversationHandler.END
+    
+    await query.answer()
+    
+    # Импортируем здесь, чтобы избежать циклического импорта
+    from .button_handlers import show_sheet_selection_for_add_record
+    
+    # Показываем выбор листа для упущений
+    await show_sheet_selection_for_add_record(update, context, "skip")
+    
+    # Остаемся в ConversationHandler, ожидая выбора листа через entry points
+    # Переходим в состояние выбора листа
+    from ..states.conversation_states import SHEET_SELECTION
+    return SHEET_SELECTION

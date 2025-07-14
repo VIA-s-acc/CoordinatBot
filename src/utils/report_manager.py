@@ -30,43 +30,48 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
         report_text = (
             f"📢 🟥<b>ԽՄԲԱԳՐՈՒՄ</b> ID: <code>{record_id}</code> 🟥\n\n"
             f"👤 Օգտագործող: <b>{user_name}</b> \n"
-            f"🔧 Գործողություն: <b>{action}</b>\n\n"
         ) + format_record_info(record) + "\n\n" 
     elif action == "Բացթողում":
         date = record.get('date', 'N/A')
         report_text = (
             f"📢 🟡<b>ԲԱՑԹՈՂՈՒՄ: {date} ամսաթվով</b>🟡\n\n"
             f"👤 Օգտագործող: <b>{user_name}</b>\n"
-            f"🔧 Գործողություն: <b>{action}</b>\n\n"
         ) + format_record_info(record) + "\n\n" 
     else:
         report_text = (
-            f"📢 <b>ՎԵՐՋԻՆ ԳՈՐԾՈՂՈՒԹՅՈՒՆ</b>\n\n"
+            f"📢 <b>Ավելացում</b>\n\n"
             f"👤 Օգտագործող: <b>{user_name}</b>\n"
-            f"🔧 Գործողություն: <b>{action}</b>\n\n"
         ) + format_record_info(record)
         
     for chat_id, settings in report_chats.items():
         try:
+            # Проверяем, нужно ли фильтровать по листу
+            configured_sheet = settings.get('sheet_name')
+            record_sheet = record.get('sheet_name')
+            
+            # Если для чата настроен конкретный лист, отправляем отчет только для этого листа
+            if configured_sheet and record_sheet and configured_sheet != record_sheet:
+                logger.info(f"Пропускаем отчет для чата {chat_id}: лист '{record_sheet}' не соответствует настроенному '{configured_sheet}'")
+                continue
+                
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=report_text,
                 parse_mode="HTML"
             )
+            logger.info(f"Отчет отправлен в чат {chat_id} для листа '{record_sheet}'")
         except Exception as e:
             logger.error(f"Սխալ հաշվետվություն ուղարկելիս {chat_id}: {e}")
 
-def format_record_info(record: dict) -> str:
+def     format_record_info(record: dict) -> str:
     """Форматирует информацию о записи"""
     return (
-        f"🆔 ID: <code>{record.get('id', 'N/A')}</code>\n"
-        f"📅 Ամսաթիվ: <b>{record.get('date', 'N/A')}</b>\n"
+        f"🆔 ID: <code>{record.get('id', 'N/A')}</code>\n\n\n"
         f"🏪 Մատակարար: <b>{record.get('supplier', 'N/A')}</b>\n"
+        f"📅 Ամսաթիվ: <b>{record.get('date', 'N/A')}</b>\n"
         f"🧭 Ուղղություն: <b>{record.get('direction', 'N/A')}</b>\n"
         f"📝 Նկարագրություն: <b>{record.get('description', 'N/A')}</b>\n"
         f"💰 Գումար: <b>{record.get('amount', 0):,.2f}</b>\n"
-        f"📊 Աղյուսակ: <code>{record.get('spreadsheet_id', '—')}</code>\n"
-        f"📋 Թերթիկ: <code>{record.get('sheet_name', '—')}</code>"
     )
 
 class ReportManager:

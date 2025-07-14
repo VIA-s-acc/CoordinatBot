@@ -148,7 +148,7 @@ class GoogleSheetsManager:
             logger.error(f"❌ Ошибка при установке заголовков: {e}")
 
     def add_record_to_sheet(self, spreadsheet_id: str, sheet_name: str, record: Dict) -> bool:
-        """Добавляет запись в Google Sheet"""
+        """Добавляет запись в Google Sheet с сортировкой по дате"""
         try:
             worksheet = self.get_worksheet_by_name(spreadsheet_id, sheet_name)
             if not worksheet:
@@ -158,17 +158,67 @@ class GoogleSheetsManager:
             headers = ['ID', 'ամսաթիվ', 'մատակարար', 'ուղղություն', 'ծախսի բնութագիր', 'Արժեք']
             self.ensure_headers(worksheet, headers)
 
+            # Конвертируем дату из YYYY-MM-DD в dd.mm.yy формат
+            formatted_date = record.get('date', '')
+            if formatted_date:
+                try:
+                    # Парсим дату в формате YYYY-MM-DD
+                    date_obj = datetime.strptime(formatted_date, '%Y-%m-%d')
+                    # Конвертируем в формат dd.mm.yy (обычные точки)
+                    formatted_date = date_obj.strftime('%d.%m.%y')
+                except ValueError:
+                    logger.warning(f"Неверный формат даты: {formatted_date}")
+                    formatted_date = record.get('date', '')
+
             new_row = [
                 record.get('id', ''),
-                record.get('date', ''),
+                formatted_date,
                 record.get('supplier', ''),
                 record.get('direction', ''),
                 record.get('description', ''),
                 record.get('amount', 0)
             ]
 
-            worksheet.append_row(new_row)
-            logger.info(f"Запись {record.get('id')} добавлена в Google Sheets")
+            # Получаем все записи для поиска правильной позиции
+            all_records = worksheet.get_all_records()
+            record_date = record.get('date', '')
+            
+            # Находим правильную позицию для вставки по дате
+            insert_row = len(all_records) + 2  # После всех записей по умолчанию
+            
+            if record_date:
+                try:
+                    # Парсим дату новой записи (в формате YYYY-MM-DD)
+                    new_date = datetime.strptime(record_date, '%Y-%m-%d')
+                    
+                    # Ищем позицию для вставки (записи должны быть отсортированы по дате)
+                    for i, existing_record in enumerate(all_records):
+                        existing_date_str = existing_record.get('ամսաթիվ', '')
+                        if existing_date_str:
+                            try:
+                                # Парсим существующую дату в формате dd.mm.yy
+                                existing_date = datetime.strptime(existing_date_str, '%d.%m.%y')
+                                # Корректируем год если нужно
+                                if existing_date.year < 2000:
+                                    existing_date = existing_date.replace(year=existing_date.year + 100)
+                                if new_date < existing_date:
+                                    insert_row = i + 2  # +2 потому что записи начинаются с 2-й строки
+                                    break
+                            except ValueError:
+                                continue
+                                
+                except ValueError:
+                    # Если дата не может быть распарсена, добавляем в конец
+                    pass
+            
+            # Вставляем строку в нужную позицию
+            if insert_row <= len(all_records) + 1:
+                worksheet.insert_row(new_row, insert_row)
+                logger.info(f"Запись {record.get('id')} вставлена в позицию {insert_row} с сортировкой по дате")
+            else:
+                worksheet.append_row(new_row)
+                logger.info(f"Запись {record.get('id')} добавлена в конец листа")
+            
             return True
 
         except Exception as e:
@@ -177,7 +227,7 @@ class GoogleSheetsManager:
 
     def update_record_in_sheet(self, spreadsheet_id: str, sheet_name: str, 
                              record_id: str, field: str, new_value) -> bool:
-        """Обновляет запись в Google Sheet"""
+        """Обновляет запись в Google Sheet с пересортировкой при изменении даты"""
         try:
             worksheet = self.get_worksheet_by_name(spreadsheet_id, sheet_name)
             if not worksheet:
@@ -195,16 +245,102 @@ class GoogleSheetsManager:
             
             sheet_field = field_mapping.get(field, field)
             
+            # Находим запись для обновления
+            record_found = False
+            record_row = None
+            current_record = None
+            
             for i, row in enumerate(records, start=2):
                 if str(row.get('ID', '')).strip() == record_id:
+                    record_found = True
+                    record_row = i
+                    current_record = row
+                    break
+            
+            if not record_found:
+                logger.error(f"Запись {record_id} не найдена для обновления")
+                return False
+            
+            # Если обновляется дата, нужно переместить запись в правильную позицию
+            if field == 'date' and new_value:
+                try:
+                    # Парсим новую дату (в формате YYYY-MM-DD)
+                    new_date = datetime.strptime(new_value, '%Y-%m-%d')
+                    
+                    # Конвертируем в формат dd.mm.yy для записи в таблицу
+                    formatted_new_date = new_date.strftime('%d.%m.%y')
+                    
+                    # Создаем обновленную запись
+                    updated_record = current_record.copy()
+                    updated_record[sheet_field] = formatted_new_date
+                    
+                    # Удаляем старую запись
+                    worksheet.delete_rows(record_row)
+                    
+                    # Получаем обновленный список записей (без удаленной)
+                    updated_records = worksheet.get_all_records()
+                    
+                    # Находим правильную позицию для вставки
+                    insert_row = len(updated_records) + 2  # По умолчанию в конец
+                    
+                    for i, existing_record in enumerate(updated_records):
+                        existing_date_str = existing_record.get('ամսաթիվ', '')
+                        if existing_date_str:
+                            try:
+                                # Парсим существующую дату в формате dd.mm.yy
+                                existing_date = datetime.strptime(existing_date_str, '%d.%m.%y')
+                                # Корректируем год если нужно
+                                if existing_date.year < 2000:
+                                    existing_date = existing_date.replace(year=existing_date.year + 100)
+                                if new_date < existing_date:
+                                    insert_row = i + 2
+                                    break
+                            except ValueError:
+                                continue
+                    
+                    # Вставляем обновленную запись в правильную позицию
+                    new_row = [
+                        updated_record.get('ID', ''),
+                        updated_record.get('ամսաթիվ', ''),
+                        updated_record.get('մատակարար', ''),
+                        updated_record.get('ուղղություն', ''),
+                        updated_record.get('ծախսի բնութագիր', ''),
+                        updated_record.get('Արժեք', 0)
+                    ]
+                    
+                    worksheet.insert_row(new_row, insert_row)
+                    logger.info(f"Запись {record_id} перемещена в позицию {insert_row} после обновления даты")
+                    
+                except ValueError:
+                    # Если дата не может быть распарсена, просто обновляем на месте
                     headers = worksheet.row_values(1)
                     if sheet_field in headers:
                         col_index = headers.index(sheet_field) + 1
-                        worksheet.update_cell(i, col_index, new_value)
-                        logger.info(f"Запись {record_id} обновлена в Google Sheets")
-                        return True
+                        worksheet.update_cell(record_row, col_index, new_value)
+                        logger.info(f"Запись {record_id} обновлена на месте (неверный формат даты)")
+                    
+            else:
+                # Обычное обновление поля без перемещения
+                # Если обновляется дата, конвертируем формат
+                if field == 'date' and new_value:
+                    try:
+                        # Парсим дату в формате YYYY-MM-DD
+                        date_obj = datetime.strptime(new_value, '%Y-%m-%d')
+                        # Конвертируем в формат dd.mm.yy
+                        new_value = date_obj.strftime('%d.%m.%y')
+                    except ValueError:
+                        logger.warning(f"Неверный формат даты: {new_value}")
+                
+                headers = worksheet.row_values(1)
+                if sheet_field in headers:
+                    col_index = headers.index(sheet_field) + 1
+                    worksheet.update_cell(record_row, col_index, new_value)
+                    logger.info(f"Запись {record_id} обновлена в Google Sheets")
+                else:
+                    logger.error(f"Поле {sheet_field} не найдено в заголовках")
+                    return False
             
-            return False
+            return True
 
         except Exception as e:
             logger.error(f"Ошибка обновления записи в Google Sheets: {e}")
@@ -229,6 +365,68 @@ class GoogleSheetsManager:
 
         except Exception as e:
             logger.error(f"Ошибка удаления записи из Google Sheets: {e}")
+            return False
+
+    def sort_sheet_by_date(self, spreadsheet_id: str, sheet_name: str) -> bool:
+        """Сортирует все записи в листе по дате"""
+        try:
+            worksheet = self.get_worksheet_by_name(spreadsheet_id, sheet_name)
+            if not worksheet:
+                logger.error(f"Лист {sheet_name} не найден")
+                return False
+
+            # Получаем все записи
+            all_records = worksheet.get_all_records()
+            if not all_records:
+                logger.info("Нет записей для сортировки")
+                return True
+
+            # Сортируем записи по дате
+            def get_sort_key(record):
+                date_str = record.get('ամսաթիվ', '')
+                if date_str:
+                    try:
+                        # Парсим дату в формате dd.mm.yy
+                        parsed_date = datetime.strptime(date_str, '%d.%m.%y')
+                        # Корректируем год: если год меньше 2000, добавляем 100 лет
+                        # Это гарантирует, что все года будут в 21 веке (2000-2099)
+                        if parsed_date.year < 2000:
+                            parsed_date = parsed_date.replace(year=parsed_date.year + 100)
+                        return parsed_date
+                    except ValueError:
+                        try:
+                            # Пробуем альтернативный формат с армянскими точками
+                            parsed_date = datetime.strptime(date_str, '%d․%m․%y')
+                            if parsed_date.year < 2000:
+                                parsed_date = parsed_date.replace(year=parsed_date.year + 100)
+                            return parsed_date
+                        except ValueError:
+                            return datetime.min  # Невалидные даты отправляем в начало
+                return datetime.min
+
+            sorted_records = sorted(all_records, key=get_sort_key)
+
+            # Очищаем лист (кроме заголовков)
+            if len(all_records) > 0:
+                worksheet.delete_rows(2, len(all_records))
+
+            # Добавляем отсортированные записи
+            for record in sorted_records:
+                row = [
+                    record.get('ID', ''),
+                    record.get('ամսաթիվ', ''),
+                    record.get('մատակարար', ''),
+                    record.get('ուղղություն', ''),
+                    record.get('ծախսի բնութագիր', ''),
+                    record.get('Արժեք', 0)
+                ]
+                worksheet.append_row(row)
+
+            logger.info(f"Лист {sheet_name} отсортирован по дате ({len(sorted_records)} записей)")
+            return True
+
+        except Exception as e:
+            logger.error(f"Ошибка сортировки листа по дате: {e}")
             return False
 
     def initialize_sheet_headers(self, spreadsheet_id: str, sheet_name: str) -> bool:
@@ -285,3 +483,6 @@ def delete_record_from_sheet(spreadsheet_id: str, sheet_name: str, record_id: st
 
 def initialize_sheet_headers(spreadsheet_id: str, sheet_name: str) -> bool:
     return sheets_manager.initialize_sheet_headers(spreadsheet_id, sheet_name)
+
+def sort_sheet_by_date(spreadsheet_id: str, sheet_name: str) -> bool:
+    return sheets_manager.sort_sheet_by_date(spreadsheet_id, sheet_name)

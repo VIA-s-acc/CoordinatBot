@@ -15,7 +15,8 @@ from .handlers.record_commands import (
 )
 from .handlers.conversation_handlers import (
     create_add_record_conversation, create_edit_record_conversation,
-    create_payment_conversation, create_report_conversation
+    create_payment_conversation, create_report_conversation, create_settings_conversation,
+    create_translation_conversation
 )
 from .handlers.button_handlers import button_handler
 from .handlers.error_handler import error_handler
@@ -57,6 +58,8 @@ def create_application():
     application.add_handler(create_edit_record_conversation())
     application.add_handler(create_payment_conversation())
     application.add_handler(create_report_conversation())
+    application.add_handler(create_settings_conversation())
+    application.add_handler(create_translation_conversation())
     
     # Обработчик кнопок (должен быть после ConversationHandler'ов)
     application.add_handler(CallbackQueryHandler(button_handler))

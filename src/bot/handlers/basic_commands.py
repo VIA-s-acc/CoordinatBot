@@ -185,6 +185,12 @@ async def message_handler(update: Update, context: CallbackContext):
     if not is_user_allowed(user_id):
         return
     
+    # Обработка ввода ID пользователя для админов
+    if user_id in ADMIN_IDS and context.user_data.get('waiting_for_user_id'):
+        from .button_handlers import handle_user_id_input
+        await handle_user_id_input(update, context)
+        return
+    
     # Обработка платежей для админов
     if user_id in ADMIN_IDS and context.user_data.get('pay_step'):
         await handle_payment_step(update, context)

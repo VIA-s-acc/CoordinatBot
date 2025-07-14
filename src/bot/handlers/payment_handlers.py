@@ -15,11 +15,13 @@ from ...utils.payment_utils import (
     get_user_id_by_display_name, send_message_to_user
 )
 from ..keyboards.inline_keyboards import create_main_menu
-
+from ..handlers.translation_handlers import _
 logger = logging.getLogger(__name__)
 
 # Состояния для ConversationHandler платежей
-PAYMENT_AMOUNT, PAYMENT_PERIOD, PAYMENT_COMMENT = range(3)
+from ..states.conversation_states import (
+    PAYMENT_AMOUNT, PAYMENT_PERIOD, PAYMENT_COMMENT
+)
 
 async def pay_menu_handler(update: Update, context: CallbackContext):
     """Обработчик меню платежей"""
@@ -284,7 +286,8 @@ async def get_payment_comment(update: Update, context: CallbackContext):
         # Отправляем уведомление получателю
         if recipient_id:
             await send_message_to_user(context, recipient_id, payment_text)
-        
+            await send_message_to_user(context, sender_id, payment_text)
+            
         # Логируем в лог-чат
         await send_to_log_chat(context, f"Ավելացված է վճարում: {display_name} - {amount:,.2f} դրամ")
         
@@ -361,7 +364,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
             
             df = pd.DataFrame(records)
             if not df.empty:
-                df['date'] = pd.to_datetime(df['date'], errors='coerce', dayfirst=True)
+                df['date'] = pd.to_datetime(df['date'], format='%d.%m.%Y', errors='coerce')
             else:
                 df['date'] = pd.to_datetime([])
             
@@ -390,8 +393,8 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
 
                 # Приводим типы
                 df_pay_raw_sheet['amount'] = pd.to_numeric(df_pay_raw_sheet['amount'], errors='coerce').fillna(0)
-                df_pay_raw_sheet['date_from'] = pd.to_datetime(df_pay_raw_sheet['date_from'], errors='coerce')
-                df_pay_raw_sheet['date_to'] = pd.to_datetime(df_pay_raw_sheet['date_to'], errors='coerce')
+                df_pay_raw_sheet['date_from'] = pd.to_datetime(df_pay_raw_sheet['date_from'], format='%d.%m.%Y', errors='coerce')
+                df_pay_raw_sheet['date_to'] = pd.to_datetime(df_pay_raw_sheet['date_to'], format='%d.%m.%Y', errors='coerce')
 
                 # Слияние интервалов и агрегирование для этого листа
                 df_pay_sheet = merge_payment_intervals(df_pay_raw_sheet[['amount', 'date_from', 'date_to']])

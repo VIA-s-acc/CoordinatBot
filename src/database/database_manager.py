@@ -318,6 +318,33 @@ class DatabaseManager:
             logger.error(f"Ошибка получения платежей: {e}")
             return []
 
+    def get_records_by_period(self, start_date: str, end_date: str) -> List[Dict]:
+        """Получает записи за указанный период"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT * FROM records 
+                WHERE date >= ? AND date <= ?
+                ORDER BY created_at DESC
+            ''', (start_date, end_date))
+            
+            rows = cursor.fetchall()
+            
+            if rows:
+                columns = [desc[0] for desc in cursor.description]
+                records = [dict(zip(columns, row)) for row in rows]
+            else:
+                records = []
+            
+            conn.close()
+            return records
+
+        except Exception as e:
+            logger.error(f"Ошибка получения записей за период: {e}")
+            return []
+
 # Создаем глобальный экземпляр менеджера базы данных
 db_manager = DatabaseManager()
 
@@ -359,3 +386,7 @@ def add_payment(user_display_name: str, spreadsheet_id: str, sheet_name: str,
 
 def get_payments(user_display_name: str, spreadsheet_id: str, sheet_name: str) -> List[Tuple]:
     return db_manager.get_payments(user_display_name, spreadsheet_id, sheet_name)
+
+def get_records_by_period(start_date: str, end_date: str) -> List[Dict]:
+    """Получает записи за указанный период"""
+    return db_manager.get_records_by_period(start_date, end_date)

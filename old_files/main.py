@@ -423,15 +423,13 @@ def format_record_info(record: dict) -> str:
     user_name = user_settings.get('display_name') or user_settings.get('name') or "Անհայտ"
     
     return (
-        f"🆔 ID: <code>{record.get('id', 'N/A')}</code>\n"
-        f"👤 Ստեղծող: <b>{user_name}</b>\n"
-        f"📅 Ամսաթիվ: <b>{record.get('date', 'N/A')}</b>\n"
+        f"👤 Օգտագործող: <b>{user_name}</b>\n"
+        f"🆔 ID: <code>{record.get('id', 'N/A')}</code>\n\n\n"
         f"🏪 Մատակարար: <b>{record.get('supplier', 'N/A')}</b>\n"
+        f"📅 Ամսաթիվ: <b>{record.get('date', 'N/A')}</b>\n"
         f"🧭 Ուղղություն: <b>{record.get('direction', 'N/A')}</b>\n"
         f"📝 Նկարագրություն: <b>{record.get('description', 'N/A')}</b>\n"
         f"💰 Գումար: <b>{record.get('amount', 0):,.2f}</b>\n"
-        f"📊 Աղյուսակ: <code>{record.get('spreadsheet_id', '—')}</code>\n"
-        f"📋 Թերթիկ: <code>{record.get('sheet_name', '—')}</code>"
     )
 
 

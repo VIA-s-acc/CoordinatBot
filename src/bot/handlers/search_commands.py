@@ -5,10 +5,11 @@ import logging
 from telegram import Update
 from telegram.ext import CallbackContext
 
-from ..keyboards.inline_keyboards import create_back_to_menu_keyboard
+from ..keyboards.inline_keyboards import create_edit_record_keyboard
 from ...utils.config_utils import is_user_allowed, get_user_settings
 from ...database.database_manager import search_records, get_all_records, get_record_from_db
 from ...config.settings import ADMIN_IDS
+from telegram import InlineKeyboardButton
 
 logger = logging.getLogger(__name__)
 
@@ -142,11 +143,11 @@ async def info_command(update: Update, context: CallbackContext):
         # Добавляем информацию о времени создания, если есть
         if 'created_at' in record:
             info_text += f"🕒 Ստեղծվել է: <b>{record['created_at']}</b>\n"
-        
+
         await update.message.reply_text(
             info_text,
             parse_mode="HTML",
-            reply_markup=create_back_to_menu_keyboard()
+            reply_markup=create_edit_record_keyboard(record_id)
         )
         
     except Exception as e:
