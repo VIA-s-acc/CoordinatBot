@@ -1,5 +1,6 @@
 # 🤖 CoordinatBot - Ֆինանսական հաշվապահության համակարգ
 
+C:\Users\User\.fly\bin\fly deploy
 
 - [RUSSIAN DOCS](docs/README_RU.md)
 - [ENGLISH DOCS](docs/README_EN.md)
