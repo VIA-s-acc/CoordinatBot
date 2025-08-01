@@ -199,9 +199,14 @@ async def get_date(update: Update, context: CallbackContext):
             datetime.strptime(date_input, "%d-%m-%Y")
             date_value = date_input
         except ValueError:
-            await update.message.reply_text(
+            err_msg = await update.message.reply_text(
                 "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք DD-MM-YYYY կամ ուղարկեք '+' ընթացիկ ամսաթվի համար:"
             )
+            # Сохраняем id ошибки и id сообщения пользователя для удаления
+            context.user_data.setdefault('messages_to_delete', []).extend([
+                err_msg.message_id,
+                update.message.message_id
+            ])
             return DATE
     # Преобразуем дату в формат YYYY-MM-DD
     if date_input == '+':
@@ -213,12 +218,24 @@ async def get_date(update: Update, context: CallbackContext):
         except ValueError:
             date_value = None
     if not date_value:
-        await update.message.reply_text(
+        err_msg = await update.message.reply_text(
             "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք YYYY-MM-DD կամ ուղարկեք '+' ընթացիկ ամսաթվի համար:"
         )
+        context.user_data.setdefault('messages_to_delete', []).extend([
+            err_msg.message_id,
+            update.message.message_id
+        ])
         return DATE
 
-    # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    # Удаляем все сообщения, которые нужно удалить
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
+    # Удаляем сообщение пользователя
     try:
         await update.message.delete()
     except Exception:
@@ -246,9 +263,8 @@ async def get_date(update: Update, context: CallbackContext):
         "🏪 Ընտրեք մատակարարի տեսակը:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    # Сохраняем message_id новой инструкции
     context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
-
+    context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)
     return SUPPLIER_CHOICE
 
 async def use_my_name(update: Update, context: CallbackContext):
@@ -306,6 +322,14 @@ async def get_supplier_manual(update: Update, context: CallbackContext):
     context.user_data['record']['supplier'] = supplier
 
     # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    # Удаляем все сообщения, которые нужно удалить
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
     try:
         await update.message.delete()
     except Exception:
@@ -316,12 +340,12 @@ async def get_supplier_manual(update: Update, context: CallbackContext):
             await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
         except Exception:
             pass
-
     sent_msg = await update.message.reply_text(
         f"✅ Մատակարար: {supplier}\n\n"
         f"🧭 Մուտքագրեք ուղղությունը:"
     )
     context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
+    context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)
     return DIRECTION
 
 async def get_direction(update: Update, context: CallbackContext):
@@ -333,7 +357,14 @@ async def get_direction(update: Update, context: CallbackContext):
     direction = update.message.text.strip()
     context.user_data['record']['direction'] = direction
 
-    # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    # Удаляем все сообщения, которые нужно удалить
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
     try:
         await update.message.delete()
     except Exception:
@@ -344,12 +375,12 @@ async def get_direction(update: Update, context: CallbackContext):
             await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
         except Exception:
             pass
-
     sent_msg = await update.message.reply_text(
         f"✅ Ուղղություն: {direction}\n\n"
         f"📝 Մուտքագրեք ծախսի նկարագրությունը:"
     )
     context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
+    context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)
     return DESCRIPTION
 
 async def get_description(update: Update, context: CallbackContext):
@@ -361,7 +392,14 @@ async def get_description(update: Update, context: CallbackContext):
     description = update.message.text.strip()
     context.user_data['record']['description'] = description
 
-    # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    # Удаляем все сообщения, которые нужно удалить
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
     try:
         await update.message.delete()
     except Exception:
@@ -372,12 +410,12 @@ async def get_description(update: Update, context: CallbackContext):
             await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
         except Exception:
             pass
-
     sent_msg = await update.message.reply_text(
         f"✅ Նկարագրություն: {description}\n\n"
         f"💰 Մուտքագրեք գումարը:"
     )
     context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
+    context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)
     return AMOUNT
 
 async def get_amount(update: Update, context: CallbackContext):
@@ -389,6 +427,14 @@ async def get_amount(update: Update, context: CallbackContext):
     amount_input = update.message.text.strip()
 
     # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    # Удаляем все сообщения, которые нужно удалить
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
     try:
         await update.message.delete()
     except Exception:
@@ -464,7 +510,10 @@ async def get_amount(update: Update, context: CallbackContext):
 
     except ValueError:
         sent_msg = await update.message.reply_text("❌ Գումարի սխալ ձևաչափ: Մուտքագրեք թիվ (օրինակ՝ 1000.50):")
-        context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
+        context.user_data.setdefault('messages_to_delete', []).extend([
+            sent_msg.message_id,
+            update.message.message_id
+        ])
         return AMOUNT
 
 async def cancel_add_record(update: Update, context: CallbackContext):

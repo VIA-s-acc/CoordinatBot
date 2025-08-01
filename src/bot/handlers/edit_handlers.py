@@ -65,7 +65,7 @@ async def handle_edit_button(update: Update, context: CallbackContext):
         context.user_data['edit_field'] = field
         
         field_names = {
-            'date': 'ամսաթիվ (YYYY-MM-DD)',
+            'date': 'ամսաթիվ (DD-MM-YYYY)',
             'supplier': 'մատակարար',
             'direction': 'ուղղություն',
             'description': 'նկարագրություն',
@@ -127,6 +127,11 @@ async def get_edit_value(update: Update, context: CallbackContext):
     if not is_user_allowed(user_id):
         return ConversationHandler.END
     
+    # Удаляем сообщение пользователя с новым значением
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
     new_value = update.message.text.strip()
     record_id = context.user_data.get('edit_record_id')
     field = context.user_data.get('edit_field')
@@ -151,12 +156,14 @@ async def get_edit_value(update: Update, context: CallbackContext):
     # Валидация данных
     if field == 'date':
         try:
-            datetime.strptime(new_value, "%Y-%m-%d")
+            datetime.strptime(new_value, "%d-%m-%Y")
+            new_value = datetime.strptime(new_value, "%d-%m-%Y").strftime("%Y-%m-%d")
         except ValueError:
             await update.message.reply_text(
-                "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք YYYY-MM-DD:"
+                "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք DD-MM-YYYY:"
             )
             return EDIT_VALUE
+        
     elif field == 'amount':
         try:
             new_value = float(new_value)
