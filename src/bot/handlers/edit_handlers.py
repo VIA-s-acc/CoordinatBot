@@ -317,13 +317,21 @@ async def cancel_edit(update: Update, context: CallbackContext):
     # Обрабатываем как кнопку, так и команду
     if update.callback_query:
         record_id = update.callback_query.data.replace("cancel_edit_", "")
-        keyboard = [[InlineKeyboardButton("✏️ Խմբագրել", callback_data=f"edit_record_{record_id}")]]
-        await update.callback_query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
+        record = get_record_from_db(record_id)
+        if record:
+            text = format_record_info(record)
+            keyboard = [[InlineKeyboardButton("✏️ Խմբագրել", callback_data=f"edit_record_{record_id}")]]
+            await update.callback_query.edit_message_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await update.callback_query.edit_message_text("❌ Գրառումը չի գտնվել:")
     else:
         await update.message.reply_text(
             "❌ Խմբագրման գործողությունը չեղարկված է:",
             reply_markup=create_main_menu(user_id)
         )
-    
     context.user_data.clear()
     return ConversationHandler.END

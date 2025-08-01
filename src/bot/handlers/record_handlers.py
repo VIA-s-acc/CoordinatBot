@@ -161,7 +161,7 @@ async def start_add_skip_record(update: Update, context: CallbackContext):
         f"➕ Ավելացնել Բացթողում\n"
         f"🆔 ID: <code>{record_id}</code>\n"
         f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
-        f"📅 Մուտքագրեք ամսաթիվը (YYYY-MM-DD) կամ ուղարկեք <b>+</b>՝ ընթացիկ ամսաթվի համար:",
+        f"📅 Մուտքագրեք ամսաթիվը (DD-MM-YYYY) կամ ուղարկեք <b>+</b>՝ ընթացիկ ամսաթվի համար:",
         parse_mode="HTML"
     )
     return DATE
@@ -179,14 +179,28 @@ async def get_date(update: Update, context: CallbackContext):
     else:
         try:
             # Проверяем формат даты
-            datetime.strptime(date_input, "%Y-%m-%d")
+            datetime.strptime(date_input, "%d-%m-%Y")
             date_value = date_input
         except ValueError:
             await update.message.reply_text(
-                "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք YYYY-MM-DD կամ ուղարկեք '+' ընթացիկ ամսաթվի համար:"
+                "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք DD-MM-YYYY կամ ուղարկեք '+' ընթացիկ ամսաթվի համար:"
             )
             return DATE
-    
+    # Преобразуем дату в формат YYYY-MM-DD
+    if date_input == '+':
+        date_value = context.user_data['record']['date']
+    else:
+        try:
+            date_obj = datetime.strptime(date_input, "%d-%m-%Y")
+            date_value = date_obj.strftime("%Y-%m-%d")
+        except ValueError:
+            date_value = None
+    if not date_value:
+        await update.message.reply_text(
+            "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք YYYY-MM-DD կամ ուղարկեք '+' ընթացիկ ամսաթվի համար:"
+        )
+        return DATE
+    # Сохраняем дату в формате YYYY-MM-DD
     context.user_data['record']['date'] = date_value
     
     # Показываем модальное окно для выбора поставщика
@@ -324,7 +338,11 @@ async def get_amount(update: Update, context: CallbackContext):
         db_success = add_record_to_db(record)
         sheet_success = add_record_to_sheet(spreadsheet_id, sheet_name, record)
 
-        result_text = "✅ Գրառումն ավելացված է:\n\n"
+
+        if record.get('skip_mode'):
+            result_text = "🟡 Բացթողումը ավելացված է:\n\n"
+        else:
+            result_text = "✅ Գրառումն ավելացված է:\n\n"
 
         if db_success and sheet_success:
             logger.info(f"✅ Պահպանված է ՏԲ-ում և Google Sheets-ում ՝ ID: {record['id']}")
@@ -342,11 +360,10 @@ async def get_amount(update: Update, context: CallbackContext):
             if user_id_str in users_data:
                 if 'reports' not in users_data[user_id_str]:
                     users_data[user_id_str]['reports'] = []
-                
                 # Добавляем ID новой записи
                 users_data[user_id_str]['reports'].append(record['id'])
                 save_users(users_data)
-                
+
         result_text += "\n" + format_record_info(record) + "\n\n"
 
         keyboard = [[InlineKeyboardButton("✏️ Խմբագրել", callback_data=f"edit_record_{record['id']}")]]
@@ -363,10 +380,8 @@ async def get_amount(update: Update, context: CallbackContext):
         else:
             action = "Ավելացում"
         await send_report(context, action, record, user_info)
-        
         # Очищаем данные пользователя
         context.user_data.clear()
-
         return ConversationHandler.END
 
     except ValueError:
