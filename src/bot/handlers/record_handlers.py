@@ -88,16 +88,24 @@ async def start_add_record(update: Update, context: CallbackContext):
     keyboard.append([InlineKeyboardButton(f"🏢 Օգտագործել Ֆիրմայի անունը", callback_data="use_firm_name")])
     # keyboard.append([InlineKeyboardButton("✏️ Մուտքագրել ձեռքով", callback_data="manual_input")])
     
-    await query.edit_message_text(
-        f"➕ Ավելացնել նոր գրառում\n"
-        f"🆔 ID: <code>{record_id}</code>\n"
-        f"📅 Ամսաթիվ: <b>{current_date}</b>\n"
-        f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
-        f"🏪 Ընտրեք մատակարարի տեսակը:",
+    # Удаляем предыдущее сообщение (если есть)
+    try:
+        await query.delete_message()
+    except Exception:
+        pass
+    sent_msg = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=(
+            f"➕ Ավելացնել նոր գրառում\n"
+            f"🆔 ID: <code>{record_id}</code>\n"
+            f"📅 Ամսաթիվ: <b>{current_date}</b>\n"
+            f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
+            f"🏪 Ընտրեք մատակարարի տեսակը:"
+        ),
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    
+    context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
     return SUPPLIER_CHOICE
 
 async def start_add_skip_record(update: Update, context: CallbackContext):
@@ -157,13 +165,22 @@ async def start_add_skip_record(update: Update, context: CallbackContext):
     }
 
     # Просим ввести дату вручную или отправить "+" для текущей
-    await query.edit_message_text(
-        f"➕ Ավելացնել Բացթողում\n"
-        f"🆔 ID: <code>{record_id}</code>\n"
-        f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
-        f"📅 Մուտքագրեք ամսաթիվը (DD-MM-YYYY) կամ ուղարկեք <b>+</b>՝ ընթացիկ ամսաթվի համար:",
+    # Удаляем предыдущее сообщение (если есть)
+    try:
+        await query.delete_message()
+    except Exception:
+        pass
+    sent_msg = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=(
+            f"➕ Ավելացնել Բացթողում\n"
+            f"🆔 ID: <code>{record_id}</code>\n"
+            f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
+            f"📅 Մուտքագրեք ամսաթիվը (DD-MM-YYYY) կամ ուղարկեք <b>+</b>՝ ընթացիկ ամսաթվի համար:"
+        ),
         parse_mode="HTML"
     )
+    context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
     return DATE
 
 async def get_date(update: Update, context: CallbackContext):
@@ -173,12 +190,12 @@ async def get_date(update: Update, context: CallbackContext):
         return ConversationHandler.END
         
     date_input = update.message.text.strip()
-    
+
+    # Проверяем формат даты
     if date_input == '+':
         date_value = context.user_data['record']['date']
     else:
         try:
-            # Проверяем формат даты
             datetime.strptime(date_input, "%d-%m-%Y")
             date_value = date_input
         except ValueError:
@@ -200,24 +217,38 @@ async def get_date(update: Update, context: CallbackContext):
             "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք YYYY-MM-DD կամ ուղարկեք '+' ընթացիկ ամսաթվի համար:"
         )
         return DATE
+
+    # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+    last_bot_msg_id = context.user_data.get('last_bot_message_id')
+    if last_bot_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+        except Exception:
+            pass
+
     # Сохраняем дату в формате YYYY-MM-DD
     context.user_data['record']['date'] = date_value
-    
+
     # Показываем модальное окно для выбора поставщика
     user_settings = get_user_settings(user_id)
     display_name = user_settings.get('display_name')
-    
+
     keyboard = []
     if display_name:
         keyboard.append([InlineKeyboardButton(f"👤 Օգտագործել իմ անունը ({display_name})", callback_data="use_my_name")])
     keyboard.append([InlineKeyboardButton(f"🏢 Օգտագործել Ֆիրմայի անունը", callback_data="use_firm_name")])
-    # keyboard.append([InlineKeyboardButton("✏️ Մուտքագրել ձեռքով", callback_data="manual_input")])
-    
-    await update.message.reply_text(
+
+    sent_msg = await update.message.reply_text(
         "🏪 Ընտրեք մատակարարի տեսակը:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    
+    # Сохраняем message_id новой инструкции
+    context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
+
     return SUPPLIER_CHOICE
 
 async def use_my_name(update: Update, context: CallbackContext):
@@ -273,12 +304,24 @@ async def get_supplier_manual(update: Update, context: CallbackContext):
     
     supplier = update.message.text.strip()
     context.user_data['record']['supplier'] = supplier
-    
-    await update.message.reply_text(
+
+    # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+    last_bot_msg_id = context.user_data.get('last_bot_message_id')
+    if last_bot_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+        except Exception:
+            pass
+
+    sent_msg = await update.message.reply_text(
         f"✅ Մատակարար: {supplier}\n\n"
         f"🧭 Մուտքագրեք ուղղությունը:"
     )
-    
+    context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
     return DIRECTION
 
 async def get_direction(update: Update, context: CallbackContext):
@@ -289,12 +332,24 @@ async def get_direction(update: Update, context: CallbackContext):
     
     direction = update.message.text.strip()
     context.user_data['record']['direction'] = direction
-    
-    await update.message.reply_text(
+
+    # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+    last_bot_msg_id = context.user_data.get('last_bot_message_id')
+    if last_bot_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+        except Exception:
+            pass
+
+    sent_msg = await update.message.reply_text(
         f"✅ Ուղղություն: {direction}\n\n"
         f"📝 Մուտքագրեք ծախսի նկարագրությունը:"
     )
-    
+    context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
     return DESCRIPTION
 
 async def get_description(update: Update, context: CallbackContext):
@@ -305,12 +360,24 @@ async def get_description(update: Update, context: CallbackContext):
     
     description = update.message.text.strip()
     context.user_data['record']['description'] = description
-    
-    await update.message.reply_text(
+
+    # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+    last_bot_msg_id = context.user_data.get('last_bot_message_id')
+    if last_bot_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+        except Exception:
+            pass
+
+    sent_msg = await update.message.reply_text(
         f"✅ Նկարագրություն: {description}\n\n"
         f"💰 Մուտքագրեք գումարը:"
     )
-    
+    context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
     return AMOUNT
 
 async def get_amount(update: Update, context: CallbackContext):
@@ -320,6 +387,18 @@ async def get_amount(update: Update, context: CallbackContext):
         return ConversationHandler.END
     
     amount_input = update.message.text.strip()
+
+    # Удаляем сообщение пользователя и предыдущее сообщение бота (инструкцию)
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+    last_bot_msg_id = context.user_data.get('last_bot_message_id')
+    if last_bot_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+        except Exception:
+            pass
 
     try:
         amount = float(amount_input)
@@ -337,7 +416,6 @@ async def get_amount(update: Update, context: CallbackContext):
         # Сохраняем в БД и Google Sheets
         db_success = add_record_to_db(record)
         sheet_success = add_record_to_sheet(spreadsheet_id, sheet_name, record)
-
 
         if record.get('skip_mode'):
             result_text = "🟡 Բացթողումը ավելացված է:\n\n"
@@ -385,7 +463,8 @@ async def get_amount(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
     except ValueError:
-        await update.message.reply_text("❌ Գումարի սխալ ձևաչափ: Մուտքագրեք թիվ (օրինակ՝ 1000.50):")
+        sent_msg = await update.message.reply_text("❌ Գումարի սխալ ձևաչափ: Մուտքագրեք թիվ (օրինակ՝ 1000.50):")
+        context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
         return AMOUNT
 
 async def cancel_add_record(update: Update, context: CallbackContext):
