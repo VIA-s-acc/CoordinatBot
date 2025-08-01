@@ -127,6 +127,14 @@ async def get_edit_value(update: Update, context: CallbackContext):
     if not is_user_allowed(user_id):
         return ConversationHandler.END
     
+    # Удаляем все сообщения, которые нужно удалить (ошибки и некорректные ответы)
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await update.message.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
     # Удаляем сообщение пользователя с новым значением
     try:
         await update.message.delete()
@@ -159,28 +167,53 @@ async def get_edit_value(update: Update, context: CallbackContext):
             datetime.strptime(new_value, "%d-%m-%Y")
             new_value = datetime.strptime(new_value, "%d-%m-%Y").strftime("%Y-%m-%d")
         except ValueError:
-            await update.message.reply_text(
+            err_msg = await update.message.reply_text(
                 "❌ Ամսաթվի սխալ ձևաչափ: Օգտագործեք DD-MM-YYYY:"
             )
+            # Сохраняем id ошибки и id сообщения пользователя для удаления
+            context.user_data.setdefault('messages_to_delete', []).extend([
+                err_msg.message_id,
+                update.message.message_id
+            ])
+            try:
+                await update.message.delete()
+            except Exception:
+                pass
             return EDIT_VALUE
-        
     elif field == 'amount':
         try:
             new_value = float(new_value)
         except ValueError:
-            await update.message.reply_text(
+            err_msg = await update.message.reply_text(
                 "❌ Գումարի սխալ ձևաչափ: Մուտքագրեք թիվ:"
             )
+            context.user_data.setdefault('messages_to_delete', []).extend([
+                err_msg.message_id,
+                update.message.message_id
+            ])
+            try:
+                await update.message.delete()
+            except Exception:
+                pass
             return EDIT_VALUE
     
+    # Удаляем сообщения об ошибках, если они были (например, при предыдущем неверном вводе)
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await update.message.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
+
     # Обновляем в Google Sheets
     spreadsheet_id = record.get('spreadsheet_id')
     sheet_name = record.get('sheet_name')
     sheet_success = update_record_in_sheet(spreadsheet_id, sheet_name, record_id, field, new_value)
-    
+
     # Обновляем в базе данных
     db_success = update_record_in_db(record_id, field, new_value)
-    
+
     # Результат
     if db_success and sheet_success:
         result_text = f"✅ '{field}' դաշտը թարմացված է '{new_value}' արժեքով"
@@ -192,7 +225,7 @@ async def get_edit_value(update: Update, context: CallbackContext):
         result_text = f"⚠️ Սխալ ՏԲ-ում թարմացնելիս\n✅ '{field}' դաշտը թարմացված է Google Sheets-ում"
     else:
         result_text = f"❌ '{field}' դաշտը թարմացնելու սխալ"
-    
+
     keyboard = [[InlineKeyboardButton("✏️ Խմբագրել", callback_data=f"edit_record_{record['id']}")]]
     await update.message.reply_text(result_text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
     
