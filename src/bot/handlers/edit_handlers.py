@@ -33,6 +33,14 @@ def get_user_id_by_record_id(record_id: str) -> int:
                 return int(user_id_str)
     return 0
 
+def get_user_id_by_name(name: str) -> int:
+    """Возвращает ID пользователя по имени"""
+    users = load_users()
+    for user_id_str, user_data in users.items():
+        if user_data.get('display_name') == name:
+            return int(user_id_str)
+    return 0
+
 async def handle_edit_button(update: Update, context: CallbackContext):
     """Обрабатывает нажатие кнопок редактирования"""
     query = update.callback_query

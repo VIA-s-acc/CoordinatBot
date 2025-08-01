@@ -9,17 +9,47 @@ from telegram import Update
 from telegram.ext import CallbackContext
 
 from ...config.settings import ADMIN_IDS
+from telegram.constants import ChatAction
 from ...utils.config_utils import (
     is_user_allowed, load_users, save_users, 
     load_allowed_users, save_allowed_users,
     add_allowed_user, remove_allowed_user,
     set_log_chat, set_report_settings, send_to_log_chat
 )
-from ...database.database_manager import backup_db_to_dict, search_records, get_all_records, get_record_from_db
-from ...google_integration.sheets_manager import initialize_sheet_headers, get_all_spreadsheets, get_worksheets_info
+from ...database.database_manager import backup_db_to_dict, search_records, get_all_records, get_record_from_db, add_record_to_db
+from ...google_integration.sheets_manager import initialize_sheet_headers, get_all_spreadsheets, get_worksheets_info, open_sheet_by_id
 from ..keyboards.inline_keyboards import create_main_menu
+from .edit_handlers import get_user_id_by_name
 
 logger = logging.getLogger(__name__)
+
+async def send_data_files_command(update: Update, context: CallbackContext):
+    """Команда для отправки всех файлов из папки data администратору"""
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
+        return
+
+    data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data'))
+    if not os.path.exists(data_dir):
+        await update.message.reply_text("❌ Папка data не найдена!")
+        return
+
+    files = [f for f in os.listdir(data_dir) if os.path.isfile(os.path.join(data_dir, f))]
+    if not files:
+        await update.message.reply_text("ℹ️ В папке data нет файлов для отправки.")
+        return
+
+    await update.message.reply_text(f"📤 Отправляю {len(files)} файлов из папки data...")
+    for fname in files:
+        fpath = os.path.join(data_dir, fname)
+        try:
+            await context.bot.send_chat_action(chat_id=user_id, action=ChatAction.UPLOAD_DOCUMENT)
+            with open(fpath, 'rb') as f:
+                await context.bot.send_document(chat_id=user_id, document=f, filename=fname)
+        except Exception as e:
+            await update.message.reply_text(f"❌ Не удалось отправить {fname}: {e}")
+    await update.message.reply_text("✅ Все файлы отправлены.")
 
 async def set_log_command(update: Update, context: CallbackContext):
     """Команда установки лог-чата"""
@@ -383,54 +413,124 @@ async def sync_sheets_command(update: Update, context: CallbackContext):
     except Exception as e:
         await update.message.reply_text(f"❌ Սինխրոնիզացիայի սխալ: {e}")
 
+
+def initialize_and_sync_sheets():
+    import uuid
+    import logging
+
+    logger = logging.getLogger(__name__)
+    headers = ['ID', 'ամսաթիվ', 'մատակարար', 'ուղղություն', 'ծախսի բնութագիր', 'Արժեք']
+    spreadsheets = get_all_spreadsheets()
+
+    for spreadsheet in spreadsheets:
+        spreadsheet_id = spreadsheet['id']
+        spreadsheet_name = spreadsheet['name']
+        logger.info(f"🔄 Обработка таблицы: {spreadsheet_name} ({spreadsheet_id})")
+
+        sheet = open_sheet_by_id(spreadsheet_id)
+        if not sheet:
+            logger.error(f"❌ Не удалось открыть таблицу: {spreadsheet_name}")
+            continue
+
+        for worksheet in sheet.worksheets():
+            sheet_name = worksheet.title
+            logger.info(f"  📋 Лист: {sheet_name}")
+
+            try:
+                rows = worksheet.get_all_records()
+                new_rows = []
+                last_valid_date = None
+                for row in rows:
+                    if all(not str(value).strip() for value in row.values()):
+                        continue
+
+                    row_id = str(row.get('ID', '')).strip()
+                    if not row_id:
+                        row_id = "cb-" + str(uuid.uuid4())[:8]
+
+                    # 🗓 Обработка даты
+                    raw_date = str(row.get('ամսաթիվ', '')).strip()
+                    if raw_date:
+                        normalized_date = raw_date.replace("․", ".").strip()
+                        last_valid_date = normalized_date
+                    elif last_valid_date:
+                        normalized_date = last_valid_date
+                    else:
+                        normalized_date = ""
+
+                    # 💰 Обработка суммы
+                    raw_amount = str(row.get('Արժեք', '0'))
+                    cleaned_amount = (
+                        raw_amount.replace('\xa0', '')
+                                  .replace('\u202f', '')
+                                  .replace(' ', '')
+                                  .replace(',', '.')
+                                  .strip()
+                    )
+
+                    # Если cleaned_amount пуст, то присваиваем 0.0
+                    if not cleaned_amount:
+                        amount = 0.0
+                        logger.warning(f"⚠️ Пустое значение в колонке суммы для строки {row}")
+                    else:
+                        try:
+                            amount = float(cleaned_amount)
+                        except ValueError:
+                            amount = 0.0
+                            logger.warning(f"⚠️ Невозможно преобразовать сумму '{raw_amount}' → 0.0")
+
+                    # 📦 Подготовка записи
+                    user_id = get_user_id_by_name(row.get('մատակարար', ''))
+                    record = {
+                        'id': row_id,
+                        'date': normalized_date,
+                        'supplier': str(row.get('մատակարար', '')).strip(),
+                        'direction': str(row.get('ուղղություն', '')).strip(),
+                        'description': str(row.get('ծախսի բնութագիր', '')).strip(),
+                        'amount': amount,
+                        'spreadsheet_id': spreadsheet_id,
+                        'sheet_name': sheet_name,
+                        'user_id': user_id if user_id != 0 else None
+                    }
+
+                    if not get_record_from_db(row_id):
+                        success = add_record_to_db(record)
+                        if success:
+                            logger.info(f"    ➕ Добавлена запись в БД: {row_id}")
+                        else:
+                            logger.warning(f"    ⚠️ Не удалось добавить запись в БД: {row_id}")
+                    new_rows.append([
+                        row_id,
+                        normalized_date,
+                        record['supplier'],
+                        record['direction'],
+                        record['description'],
+                        amount
+                    ])
+
+                # Обновление листа одним вызовом
+                all_data = [headers] + new_rows
+                worksheet.clear()
+                worksheet.update(f"A1:F{len(all_data)}", all_data)
+
+                logger.info(f"    ✅ Лист {sheet_name} пересоздан ({len(new_rows)} строк)")
+
+            except Exception as e:
+                logger.error(f"    ❌ Ошибка при обработке листа {sheet_name}: {e}")
+
+
+
 async def initialize_sheets_command(update: Update, context: CallbackContext):
-    """Команда инициализации всех Google Sheets"""
+    """Команда инициализации всех Google Sheets — միայն ադմինների համար"""
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
         return
 
     try:
-        from ...google_integration.sheets_manager import initialize_sheet_headers
-        
-        # Получаем все доступные таблицы
-        spreadsheets = get_all_spreadsheets()
-        
-        if not spreadsheets:
-            await update.message.reply_text("❌ Доступных таблиц не найдено")
-            return
-            
-        initialized_count = 0
-        total_sheets = 0
-        
-        for spreadsheet in spreadsheets:
-            spreadsheet_id = spreadsheet['id']
-            spreadsheet_title = spreadsheet.get('name', 'Без названия')
-            
-            try:
-                sheets_info, _ = get_worksheets_info(spreadsheet_id)
-                
-                for sheet in sheets_info:
-                    sheet_name = sheet['title']
-                    success = initialize_sheet_headers(spreadsheet_id, sheet_name)
-                    
-                    if success:
-                        initialized_count += 1
-                    total_sheets += 1
-                    
-            except Exception as e:
-                logger.error(f"Ошибка инициализации таблицы {spreadsheet_title}: {e}")
-                continue
-        
-        await update.message.reply_text(
-            f"✅ Инициализация завершена:\n"
-            f"📊 Обработано таблиц: {len(spreadsheets)}\n"
-            f"📋 Инициализировано листов: {initialized_count}/{total_sheets}\n"
-            f"✅ Все заголовки обновлены в соответствии с форматом бота"
-        )
-        
-        await send_to_log_chat(context, f"✅ Инициализировано {initialized_count}/{total_sheets} листов в {len(spreadsheets)} таблицах")
-        
+        initialize_and_sync_sheets()
+        await update.message.reply_text("✅ Բոլոր աղյուսակները հաջողությամբ մշակված են, ID-ները ավելացված են և բազան համաժամացված է:")
+        await send_to_log_chat(context, "✅ Կատարվել է /initialize_sheets հրամանը - բոլոր աղյուսակները թարմացված են:")
     except Exception as e:
         await update.message.reply_text(f"❌ Սխալ աղյուսակները նախապատրաստելիս: {e}")
 

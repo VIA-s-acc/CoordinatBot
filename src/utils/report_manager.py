@@ -28,20 +28,20 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
 
     if action == "Խմբագրում":
         report_text = (
-            f"📢 🟥<b>ԽՄԲԱԳՐՈՒՄ</b> ID: <code>{record_id}</code> 🟥\n\n"
+            f"📢 🟥<b>ԽՄԲԱԳՐՈՒՄ</b> ID: <code>{record_id}</code> 🟥\n"
             f"👤 Օգտագործող: <b>{user_name}</b> \n"
         ) + format_record_info(record) + "\n\n" 
     elif action == "Բացթողում":
         date = record.get('date', 'N/A')
         report_text = (
-            f"📢 🟡<b>ԲԱՑԹՈՂՈՒՄ: {date} ամսաթվով</b>🟡\n\n"
+            f"📢 🟡<b>ԲԱՑԹՈՂՈՒՄ: {date} ամսաթվով</b>🟡\n"
             f"👤 Օգտագործող: <b>{user_name}</b>\n"
         ) + format_record_info(record) + "\n\n" 
     else:
         report_text = (
-            f"📢 <b>Ավելացում</b>\n\n"
+            f"📢 <b>Ավելացում</b>\n"
             f"👤 Օգտագործող: <b>{user_name}</b>\n"
-        ) + format_record_info(record)
+        ) + format_record_info(record) 
         
     for chat_id, settings in report_chats.items():
         try:
@@ -63,15 +63,33 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
         except Exception as e:
             logger.error(f"Սխալ հաշվետվություն ուղարկելիս {chat_id}: {e}")
 
-def     format_record_info(record: dict) -> str:
+def format_record_info(record: dict) -> str:
     """Форматирует информацию о записи"""
+    # Преобразуем дату из Y.M.D (или Y-M-D) в D.M.Y, если возможно
+    date_str = record.get('date', 'N/A')
+    if date_str and date_str != 'N/A':
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            formatted_date = date_obj.strftime("%d.%m.%Y")
+        except Exception:
+            formatted_date = date_str
+    else:
+        formatted_date = 'N/A'
+
+    amount = record.get('amount', 0)
+    # Форматируем сумму без .00, но с разделителем тысяч
+    if isinstance(amount, float) and amount.is_integer():
+        amount_str = f"{int(amount):,}".replace(",", ",")
+    else:
+        amount_str = f"{amount:,}".replace(",", ",")
     return (
         f"🆔 ID: <code>{record.get('id', 'N/A')}</code>\n\n\n"
-        f"🏪 Մատակարար: <b>{record.get('supplier', 'N/A')}</b>\n"
-        f"📅 Ամսաթիվ: <b>{record.get('date', 'N/A')}</b>\n"
-        f"🧭 Ուղղություն: <b>{record.get('direction', 'N/A')}</b>\n"
-        f"📝 Նկարագրություն: <b>{record.get('description', 'N/A')}</b>\n"
-        f"💰 Գումար: <b>{record.get('amount', 0):,.2f}</b>\n"
+        f"🏪: <b>{record.get('supplier', 'N/A')}</b>\n"
+        f"📅: <b>{formatted_date}</b>\n"
+        f"🧭: <b>{record.get('direction', 'N/A')}</b>\n"
+        f"📝: <b>{record.get('description', 'N/A')}</b>\n"
+        f"💰: <b>{amount_str}</b>\n"
+        f"📋: <b>{record.get('sheet_name', 'N/A')}</b>"
     )
 
 class ReportManager:

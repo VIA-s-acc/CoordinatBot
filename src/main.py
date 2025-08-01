@@ -24,7 +24,8 @@ from src.bot.handlers.basic_commands import (
 from src.bot.handlers.admin_handlers import (
     set_log_command, set_report_command, allow_user_command, 
     disallow_user_command, allowed_users_command, set_user_name_command,
-    export_command, sync_sheets_command, initialize_sheets_command, set_sheet_command
+    export_command, sync_sheets_command, initialize_sheets_command, set_sheet_command,
+    send_data_files_command
 )
 from src.bot.handlers.search_commands import (
     search_command, recent_command, info_command, my_report_command
@@ -87,6 +88,7 @@ def main():
         application.add_handler(CommandHandler("export", export_command))
         application.add_handler(CommandHandler("sync_sheets", sync_sheets_command))
         application.add_handler(CommandHandler("initialize_sheets", initialize_sheets_command))
+        application.add_handler(CommandHandler("send_data_files", send_data_files_command))
         
         # Отдельные обработчики для специфичных callback'ов (должны быть ДО общего button_handler)
         from src.bot.handlers.edit_handlers import confirm_delete, cancel_edit

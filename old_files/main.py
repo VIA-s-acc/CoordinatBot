@@ -435,7 +435,7 @@ def format_record_info(record: dict) -> str:
         f"📅 Ամսաթիվ: <b>{record.get('date', 'N/A')}</b>\n"
         f"🧭 Ուղղություն: <b>{record.get('direction', 'N/A')}</b>\n"
         f"📝 Նկարագրություն: <b>{record.get('description', 'N/A')}</b>\n"
-        f"💰 Գումար: <b>{record.get('amount', 0):,.2f}</b>\n"
+        f"💰 Գումար: <b>{record.get('amount', 0)}</b>\n"
     )
 
 

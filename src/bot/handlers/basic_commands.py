@@ -161,6 +161,7 @@ async def help_command(update: Update, context: CallbackContext):
             "• /export - Տվյալների արտահանում\n"
             "• /sync_sheets - Google Sheets-ի համաժամեցում\n"
             "• /initialize_sheets - Բոլոր աղյուսակների նախապատրաստում\n\n"
+            "• /send_data_files - Տվյալների ֆայլերի ուղարկում ադմինիստրատորին\n"
         )
     
     help_text += (

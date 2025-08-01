@@ -327,13 +327,13 @@ async def get_amount(update: Update, context: CallbackContext):
         result_text = "✅ Գրառումն ավելացված է:\n\n"
 
         if db_success and sheet_success:
-            result_text += "✅ Պահպանված է ՏԲ-ում և Google Sheets-ում"
+            logger.info(f"✅ Պահպանված է ՏԲ-ում և Google Sheets-ում ՝ ID: {record['id']}")
         elif db_success:
-            result_text += "✅ Պահպանված է ՏԲ-ում\n⚠️ Google Sheets-ում պահպանելու սխալ"
+            logger.info(f"⚠️ Պահպանված է ՏԲ-ում ՝ ID: {record['id']}")
         elif sheet_success:
-            result_text += "⚠️ ՏԲ-ում պահպանելու սխալ \n✅ Պահպանված է Google Sheets-ում"
+            logger.info(f"⚠️ Պահպանված է Google Sheets-ում ՝ ID: {record['id']}")
         else:
-            result_text += "❌ Պահպանելու սխալ ՏԲ-ում և Google Sheets-ում"
+            logger.error(f"❌ Գրառումը չի պահպանվել ՏԲ-ում և Google Sheets-ում ՝ ID: {record['id']}")
 
         if db_success or sheet_success:
             # Добавляем запись в отчеты пользователя

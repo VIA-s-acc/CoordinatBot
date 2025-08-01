@@ -13,6 +13,11 @@ def normalize_date(date_str: str) -> str:
     # Удалить пробелы и завершающие точки
     date_str = date_str.strip().rstrip('.')
 
+    # Если дата в формате YYYY-MM-DD, преобразуем её в DD.MM.YY
+    if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_obj.strftime('%d.%m.%y')
+
     # Найти все группы цифр
     parts = re.findall(r'\d+', date_str)
 
