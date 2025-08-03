@@ -37,6 +37,11 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
             f"📢 🟡<b>ԲԱՑԹՈՂՈՒՄ: {date} ամսաթվով</b>🟡\n"
             f"👤 Օգտագործող: <b>{user_name}</b>\n"
         ) + format_record_info(record) + "\n\n" 
+    elif action == "Ջնջում":
+        report_text = (
+            f"💩<b>ՋՆՋՈՒՄ</b> ID: <code>{record_id}</code> 💩\n"
+            f"👤 Օգտագործող: <b>{user_name}</b>\n"
+        )
     else:
         report_text = (
             f"📢 <b>Ավելացում</b>\n"

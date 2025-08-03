@@ -86,7 +86,7 @@ async def handle_edit_button(update: Update, context: CallbackContext):
         keyboard = create_edit_menu(record_id, user_id in ADMIN_IDS)
         await query.edit_message_text(
             f"✏️ Գրառման խմբագրում ID: <code>{record_id}</code>\n\n"
-            f"Մուտքագրեք նոր արժեք '{field_names.get(field, field)}' դաշտի համար \nՀին։ {record[field]}",
+            f"Մուտքագրեք նոր արժեք <b>{field_names.get(field, field)}</b> դաշտի համար \nՀին: <b>{record[field]}</b>",
             parse_mode="HTML",
             reply_markup=keyboard
         )
@@ -213,16 +213,23 @@ async def get_edit_value(update: Update, context: CallbackContext):
 
     # Обновляем в базе данных
     db_success = update_record_in_db(record_id, field, new_value)
-
+    data_field = \
+    {
+        'date': 'Ամսաթիվ',
+        'supplier': 'Մատակարար',
+        'direction': 'Ուղղություն',
+        'description': 'Նկարագրություն',
+        'amount': 'Գումար'
+    }
     # Результат
     if db_success and sheet_success:
-        result_text = f"✅ '{field}' դաշտը թարմացված է '{new_value}' արժեքով"
+        result_text = f"🟥 '{data_field[field]}' դաշտը թարմացված է '{new_value}' արժեքով"
         record = get_record_from_db(record_id)
         result_text += "\n\n" + format_record_info(record)
     elif db_success:
-        result_text = f"✅ '{field}' դաշտը թարմացված է ՏԲ-ում\n⚠️ Սխալ Google Sheets-ում թարմացնելիս"
+        result_text = f"🟥 '{data_field[field]}' դաշտը թարմացված է ՏԲ-ում\n⚠️ Սխալ Google Sheets-ում թարմացնելիս"
     elif sheet_success:
-        result_text = f"⚠️ Սխալ ՏԲ-ում թարմացնելիս\n✅ '{field}' դաշտը թարմացված է Google Sheets-ում"
+        result_text = f"⚠️ Սխալ ՏԲ-ում թարմացնելիս\n✅ '{data_field[field]}' դաշտը թարմացված է Google Sheets-ում"
     else:
         result_text = f"❌ '{field}' դաշտը թարմացնելու սխալ"
 

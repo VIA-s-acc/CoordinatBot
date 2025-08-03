@@ -284,7 +284,8 @@ async def use_my_name(update: Update, context: CallbackContext):
     
     await query.edit_message_text(
         f"✅ Մատակարար: {display_name}\n\n"
-        f"🧭 Մուտքագրեք ուղղությունը:"
+        f"🧭 Մուտքագրեք <b>ուղղությունը</b>:",
+        parse_mode="HTML"
     )
     
     return DIRECTION
@@ -298,7 +299,8 @@ async def use_firm_name(update: Update, context: CallbackContext):
     
     await query.edit_message_text(
         f"✅ Մատակարար: Ֆ\n\n"
-        f"🧭 Մուտքագրեք ուղղությունը:"
+        f"🧭 Մուտքագրեք <b>ուղղությունը</b>:",
+        parse_mode="HTML"
     )
     
     return DIRECTION
@@ -342,7 +344,8 @@ async def get_supplier_manual(update: Update, context: CallbackContext):
             pass
     sent_msg = await update.message.reply_text(
         f"✅ Մատակարար: {supplier}\n\n"
-        f"🧭 Մուտքագրեք ուղղությունը:"
+        f"🧭 Մուտքագրեք <b>ուղղությունը</b>:",
+        parse_mode="HTML"
     )
     context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
     context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)
@@ -377,7 +380,8 @@ async def get_direction(update: Update, context: CallbackContext):
             pass
     sent_msg = await update.message.reply_text(
         f"✅ Ուղղություն: {direction}\n\n"
-        f"📝 Մուտքագրեք ծախսի նկարագրությունը:"
+        f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
+        parse_mode="HTML"
     )
     context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
     context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)
@@ -412,7 +416,8 @@ async def get_description(update: Update, context: CallbackContext):
             pass
     sent_msg = await update.message.reply_text(
         f"✅ Նկարագրություն: {description}\n\n"
-        f"💰 Մուտքագրեք գումարը:"
+        f"💰 Մուտքագրեք <b>գումարը</b>:",
+        parse_mode="HTML"
     )
     context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
     context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)

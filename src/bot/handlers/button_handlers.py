@@ -53,9 +53,11 @@ async def show_sheet_selection_for_add_record(update: Update, context: CallbackC
     
     if not spreadsheet_id:
         logger.warning(f"У пользователя {user_id} не настроен активный spreadsheet")
+        # Используем правильную кнопку возврата в главное меню
+        keyboard = [[InlineKeyboardButton("🏠 Գլխավոր Մենյու", callback_data="back_to_menu")]]
         await query.edit_message_text(
             "❌ Նախ պետք է ընտրել աղյուսակը",
-            reply_markup=create_back_to_menu_keyboard()
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
     
@@ -65,9 +67,11 @@ async def show_sheet_selection_for_add_record(update: Update, context: CallbackC
         
         if not sheets_info:
             logger.warning(f"Нет листов в spreadsheet {spreadsheet_id}")
+            # Используем правильную кнопку возврата в главное меню
+            keyboard = [[InlineKeyboardButton("🏠 Գլխավոր Մենյու", callback_data="back_to_menu")]]
             await query.edit_message_text(
                 "❌ Աղյուսակում թերթիկներ չկան",
-                reply_markup=create_back_to_menu_keyboard()
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
         
@@ -87,9 +91,11 @@ async def show_sheet_selection_for_add_record(update: Update, context: CallbackC
     except Exception as e:
         logger.error(f"Ошибка при создании выбора листов: {e}")
         logger.error(f"Полная ошибка: {e}", exc_info=True)
+        # Используем правильную кнопку возврата в главное меню
+        keyboard = [[InlineKeyboardButton("🏠 Գլխավոր Մենյու", callback_data="back_to_menu")]]
         await query.edit_message_text(
             f"❌ Շխալ թերթիկների ցանկը ստանալիս: {e}",
-            reply_markup=create_back_to_menu_keyboard()
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
 
@@ -732,7 +738,8 @@ async def use_my_name(update: Update, context: CallbackContext):
     
     await query.edit_message_text(
         f"✅ Մատակարար: {display_name}\n\n"
-        f"🧭 Մուտքագրեք ուղղությունը:"
+        f"🧭 Մուտքագրեք <b>ուղղությունը</b>:",
+        parse_mode="HTML"
     )
     
     return DIRECTION
@@ -745,7 +752,8 @@ async def use_firm_name(update: Update, context: CallbackContext):
     
     await query.edit_message_text(
         f"✅ Մատակարար: Ֆ\n\n"
-        f"🧭 Մուտքագրեք ուղղությունը:"
+        f"🧭 Մուտքագրեք <b>ուղղությունը</b>:",
+        parse_mode="HTML"
     )
     
     return DIRECTION

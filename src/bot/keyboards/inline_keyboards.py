@@ -10,7 +10,7 @@ def create_main_menu(user_id=None):
     # Попытка получить локализованный текст
     try:
         from ...utils.localization import _
-        add_record_text = _("menu.add_record", user_id)
+        add_record_text = _("buttons.add_record", user_id)
         select_sheet_text = _("menu.select_sheet", user_id)
         status_text = _("menu.status", user_id)
         stats_text = _("menu.stats", user_id)
@@ -21,7 +21,7 @@ def create_main_menu(user_id=None):
         settings_text = _("menu.settings", user_id)
     except:
         # Fallback на статичный текст
-        add_record_text = "➕ Ավելացնել գրառում"
+        add_record_text = "➕ գրառում"
         select_sheet_text = "📋 Ընտրել թերթիկ"
         status_text = "📊 Կարգավիճակ"
         stats_text = "📈 Վիճակագրություն"
@@ -35,7 +35,8 @@ def create_main_menu(user_id=None):
     keyboard = [
         # Основные функции - 2 кнопки в ряд
         [
-            InlineKeyboardButton(add_record_text, callback_data="add_record_menu"),
+            InlineKeyboardButton(add_record_text, callback_data="add_record_select_sheet"),
+            InlineKeyboardButton(_("buttons.add_skip"), callback_data="add_skip_record_select_sheet")
             # InlineKeyboardButton(select_sheet_text, callback_data="select_sheet")
         ],
         # Информация и статистика - 2 кнопки в ряд
@@ -44,7 +45,7 @@ def create_main_menu(user_id=None):
             # InlineKeyboardButton(stats_text, callback_data="stats")
         ],
         # Настройка таблицы - одна кнопка во всю ширину
-        [InlineKeyboardButton(select_spreadsheet_text, callback_data="select_spreadsheet")]
+        # [InlineKeyboardButton(select_spreadsheet_text, callback_data="select_spreadsheet")]
     ]
     
     if user_id and user_id in ADMIN_IDS:
@@ -54,14 +55,14 @@ def create_main_menu(user_id=None):
                 InlineKeyboardButton(payments_text, callback_data="pay_menu"),
                 # InlineKeyboardButton(analytics_text, callback_data="analytics_menu")
             ],
-            [InlineKeyboardButton(settings_text, callback_data="settings_menu")]
+            # [InlineKeyboardButton(settings_text, callback_data="settings_menu")]
         ])
     else:
         # Для обычных пользователей - личные функции и настройки
         keyboard.extend([
             [
                 InlineKeyboardButton(my_payments_text, callback_data="my_payments"),
-                InlineKeyboardButton(settings_text, callback_data="settings_menu")
+                # InlineKeyboardButton(settings_text, callback_data="settings_menu")
             ]
         ])
     
@@ -187,7 +188,7 @@ def create_add_record_sheet_selection(sheets_info, record_type):
             callback_data=callback_data
         )])
     
-    keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data="add_record_menu")])
+    keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")])
     logger.info(f"Created keyboard with {len(keyboard)} rows")
     return InlineKeyboardMarkup(keyboard)
 
@@ -204,7 +205,7 @@ def create_edit_menu(record_id: str, is_admin: bool = False):
     """Создает меню для редактирования записи"""
     keyboard = [
         [InlineKeyboardButton("📅 Ամսաթիվ", callback_data=f"edit_date_{record_id}")],
-        [InlineKeyboardButton("🏪 Մատակարար", callback_data=f"edit_supplier_{record_id}")],
+        # [InlineKeyboardButton("🏪 Մատակարար", callback_data=f"edit_supplier_{record_id}")],
         [InlineKeyboardButton("🧭 Ուղղություն", callback_data=f"edit_direction_{record_id}")],
         [InlineKeyboardButton("📝 Նկարագրություն", callback_data=f"edit_description_{record_id}")],
         [InlineKeyboardButton("💰 Գումար", callback_data=f"edit_amount_{record_id}")],

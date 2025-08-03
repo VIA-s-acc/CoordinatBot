@@ -7,11 +7,8 @@ from ...utils.config_utils import get_admin_ids
 def create_main_menu(user_id=None):
     """Создает главное меню"""
     keyboard = [
-        [InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record_menu")],
-        [InlineKeyboardButton("📋 Ընտրել թերթիկ", callback_data="select_sheet")],
-        [InlineKeyboardButton("📊 Կարգավիճակ", callback_data="status")],
-        [InlineKeyboardButton("📈 Վիճակագրություն", callback_data="stats")],
-        [InlineKeyboardButton("📊 Ընտրել աղյուսակ", callback_data="select_spreadsheet")]
+        [InlineKeyboardButton("➕ գրառում", callback_data="add_record_select_sheet")],
+        [InlineKeyboardButton("➕ Բացթողում", callback_data="add_skip_record_select_sheet")],
     ]
     
     admin_ids = get_admin_ids()
