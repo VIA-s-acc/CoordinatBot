@@ -13,7 +13,7 @@ from .translation_handlers import (
 )
 from ..states.conversation_states import (
     DATE, SUPPLIER_CHOICE, SUPPLIER_MANUAL, DIRECTION, DESCRIPTION, AMOUNT, 
-    EDIT_VALUE, CONFIRM_DELETE, SET_REPORT_SHEET, PAYMENT_AMOUNT, PAYMENT_PERIOD, PAYMENT_COMMENT,
+    EDIT_VALUE, SET_REPORT_SHEET, PAYMENT_AMOUNT, PAYMENT_PERIOD, PAYMENT_COMMENT,
     ADD_TRANSLATION_KEY, ADD_TRANSLATION_LANG, ADD_TRANSLATION_TEXT, SHEET_SELECTION
 )
 from .record_handlers import (
@@ -21,7 +21,7 @@ from .record_handlers import (
     get_direction, get_description, get_amount, cancel, start_record_selection, start_skip_record_selection
 )
 from .edit_handlers import (
-    get_edit_value, cancel_edit
+    get_edit_value
 )
 from .basic_commands import text_menu_handler
 from .button_handlers import button_handler, conversation_fallback_handler

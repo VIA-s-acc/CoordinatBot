@@ -10,14 +10,14 @@ from telegram.ext import CallbackContext
 
 from ...config.settings import ADMIN_IDS
 from telegram.constants import ChatAction
+from ...utils.date_utils import safe_parse_date_or_none
 from ...utils.config_utils import (
     is_user_allowed, load_users, save_users, 
-    load_allowed_users, save_allowed_users,
-    add_allowed_user, remove_allowed_user,
+    load_allowed_users, add_allowed_user, remove_allowed_user,
     set_log_chat, set_report_settings, send_to_log_chat
 )
-from ...database.database_manager import backup_db_to_dict, search_records, get_all_records, get_record_from_db, add_record_to_db
-from ...google_integration.sheets_manager import initialize_sheet_headers, get_all_spreadsheets, get_worksheets_info, open_sheet_by_id
+from ...database.database_manager import backup_db_to_dict, get_record_from_db, add_record_to_db
+from ...google_integration.sheets_manager import get_all_spreadsheets, get_worksheets_info, open_sheet_by_id
 from ..keyboards.inline_keyboards import create_main_menu
 from .edit_handlers import get_user_id_by_name
 
@@ -369,9 +369,9 @@ async def sync_sheets_command(update: Update, context: CallbackContext):
             # Приведение даты к YYYY-MM-DD
             raw_date = str(row.get('ամսաթիվ', '')).replace("․", ".").strip()
             try:
-                if "." in raw_date:
-                    date_obj = datetime.strptime(raw_date, "%d.%m.%y")
-                    date_fmt = date_obj.strftime("%Y-%m-%d")
+                parsed_date = safe_parse_date_or_none(raw_date)
+                if parsed_date:
+                    date_fmt = parsed_date.strftime("%Y-%m-%d")
                 else:
                     date_fmt = raw_date
             except Exception:

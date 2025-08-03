@@ -11,13 +11,12 @@ from telegram.ext import CallbackContext, ConversationHandler
 from ..keyboards.inline_keyboards import (
     create_main_menu, create_workers_menu, create_payment_menu, 
     create_back_to_menu_keyboard, create_add_record_menu,
-    create_edit_menu, create_add_record_sheet_selection
+    create_add_record_sheet_selection
 )
-from ..states.conversation_states import SUPPLIER_CHOICE, DIRECTION, SUPPLIER_MANUAL
+from ..states.conversation_states import DIRECTION, SUPPLIER_MANUAL
 from ...utils.config_utils import is_user_allowed, get_user_settings, update_user_settings
 from ...utils.localization import _
-from ...database.database_manager import get_db_stats, get_record_from_db
-from ...google_integration.sheets_manager import get_all_spreadsheets, get_spreadsheet_info, get_worksheets_info
+from ...database.database_manager import get_db_stats
 from ...utils.sheets_cache import get_cached_sheets_info, get_cached_spreadsheets
 from ...config.settings import ADMIN_IDS
 
@@ -25,9 +24,6 @@ from .payment_handlers import pay_menu_handler, pay_user_handler, send_payment_r
 from .settings_handlers import (
     settings_menu, language_menu, set_language, notification_settings,
     toggle_notifications, system_info
-)
-from .translation_handlers import (
-    list_translations, reload_translations
 )
 
 logger = logging.getLogger(__name__)

@@ -1,11 +1,8 @@
 """
 Система резервного копирования для CoordinatBot
 """
-import os
 import json
 import zipfile
-import sqlite3
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional

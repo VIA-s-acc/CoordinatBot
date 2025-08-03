@@ -4,7 +4,7 @@
 import re
 import pandas as pd
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional
 
 def normalize_date(date_str: str) -> str:
     """

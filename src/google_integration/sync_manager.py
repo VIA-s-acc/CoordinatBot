@@ -2,11 +2,10 @@
 Расширенный менеджер для Google Sheets с полной синхронизацией
 """
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, Optional
 from .sheets_manager import GoogleSheetsManager
-from ..database.database_manager import DatabaseManager, add_record_to_db, get_all_records
+from ..database.database_manager import DatabaseManager, get_all_records
 from ..utils.date_utils import normalize_date
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 

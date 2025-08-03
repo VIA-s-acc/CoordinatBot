@@ -8,12 +8,11 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler
 
 from ..states.conversation_states import DATE, SUPPLIER_CHOICE, DIRECTION, DESCRIPTION, AMOUNT, SUPPLIER_MANUAL
-from ..keyboards.inline_keyboards import create_main_menu, create_supplier_choice_keyboard
+from ..keyboards.inline_keyboards import create_main_menu
 from ...utils.config_utils import is_user_allowed, get_user_settings, update_user_settings, load_users, save_users
-from ...utils.date_utils import normalize_date
 from ...utils.formatting import format_record_info
 from ...database.database_manager import add_record_to_db
-from ...google_integration.sheets_manager import add_record_to_sheet
+from ...google_integration.async_sheets_worker import add_record_async
 from ...utils.report_manager import send_report
 from ..handlers.translation_handlers import _
 
@@ -464,9 +463,12 @@ async def get_amount(update: Update, context: CallbackContext):
 
         record = context.user_data['record']
 
-        # Сохраняем в БД и Google Sheets
+        # Сохраняем в БД 
         db_success = add_record_to_db(record)
-        sheet_success = add_record_to_sheet(spreadsheet_id, sheet_name, record)
+        
+        # Асинхронно добавляем в Google Sheets (не блокируем бота)
+        add_record_async(spreadsheet_id, sheet_name, record)
+        sheet_success = True  # Считаем успешным, так как задача добавлена в очередь
 
         if record.get('skip_mode'):
             result_text = "🟡 Բացթողումը ավելացված է:\n\n"
@@ -474,13 +476,11 @@ async def get_amount(update: Update, context: CallbackContext):
             result_text = "✅ Գրառումն ավելացված է:\n\n"
 
         if db_success and sheet_success:
-            logger.info(f"✅ Պահպանված է ՏԲ-ում և Google Sheets-ում ՝ ID: {record['id']}")
+            logger.info(f"✅ Պահպանված է ՏԲ-ում և Google Sheets очереди ՝ ID: {record['id']}")
         elif db_success:
             logger.info(f"⚠️ Պահպանված է ՏԲ-ում ՝ ID: {record['id']}")
-        elif sheet_success:
-            logger.info(f"⚠️ Պահպանված է Google Sheets-ում ՝ ID: {record['id']}")
         else:
-            logger.error(f"❌ Գրառումը չի պահպանվել ՏԲ-ում և Google Sheets-ում ՝ ID: {record['id']}")
+            logger.error(f"❌ Գրառումը չի պահպանվել ՏԲ-ում ՝ ID: {record['id']}")
 
         if db_success or sheet_success:
             # Добавляем запись в отчеты пользователя

@@ -3,15 +3,14 @@
 """
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext, ConversationHandler
+from telegram.ext import CallbackContext
 
 from ...config.settings import ADMIN_IDS
 from ...utils.localization import (
     _, get_user_language, set_user_language, 
-    get_available_languages, add_custom_translation
+    get_available_languages
 )
 from ...utils.config_utils import get_user_settings, update_user_settings
-from ..states.conversation_states import ADD_TRANSLATION_KEY, ADD_TRANSLATION_TEXT
 
 logger = logging.getLogger(__name__)
 

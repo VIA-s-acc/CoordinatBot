@@ -4,12 +4,13 @@
 import logging
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
 from .handlers.basic_commands import start, menu_command, help_command, text_menu_handler
-from .handlers.admin_commands import (
+from .handlers.admin_handlers import (
     set_log_command, set_sheet_command, set_report_command,
     initialize_sheets_command, allow_user_command, disallow_user_command,
     allowed_users_command, set_user_name_command, sync_sheets_command,
-    my_report_command, export_command
+    export_command
 )
+from .handlers.search_commands import my_report_command
 from .handlers.record_commands import (
     search_command, recent_command, info_command
 )

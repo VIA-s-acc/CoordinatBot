@@ -3,7 +3,6 @@
 """
 import json
 import logging
-from typing import Dict, List, Optional
 from ..config.settings import USERS_FILE, ALLOWED_USERS_FILE, BOT_CONFIG_FILE
 
 logger = logging.getLogger(__name__)

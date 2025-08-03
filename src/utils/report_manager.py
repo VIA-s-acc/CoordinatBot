@@ -5,12 +5,12 @@ import pandas as pd
 import logging
 from io import BytesIO
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from .date_utils import safe_parse_date_or_none
+from typing import Dict, List
 from telegram import Update
 from telegram.ext import CallbackContext
 from ..database.database_manager import get_all_records, get_payments
-from ..utils.date_utils import normalize_date, format_date_for_interval
-from ..config.settings import ADMIN_IDS
+from ..utils.date_utils import normalize_date
 from .config_utils import load_bot_config
 
 logger = logging.getLogger(__name__)
@@ -170,7 +170,12 @@ class ReportManager:
                 else:
                     cutoff_date = datetime.strptime("2024-12-05", '%Y-%m-%d').date()
                 
-                record_date = datetime.strptime(record['date'], '%d.%m.%y').date()
+                # Безопасный парсинг даты
+                record_date = safe_parse_date_or_none(record['date'])
+                if record_date is None:
+                    logger.warning(f"Пропускаем запись с некорректной датой: {record['date']}")
+                    continue
+                    
                 if record_date >= cutoff_date:
                     filtered_records.append(record)
             

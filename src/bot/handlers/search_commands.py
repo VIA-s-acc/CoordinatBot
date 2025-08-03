@@ -8,8 +8,6 @@ from telegram.ext import CallbackContext
 from ..keyboards.inline_keyboards import create_edit_record_keyboard
 from ...utils.config_utils import is_user_allowed, get_user_settings
 from ...database.database_manager import search_records, get_all_records, get_record_from_db
-from ...config.settings import ADMIN_IDS
-from telegram import InlineKeyboardButton
 
 logger = logging.getLogger(__name__)
 

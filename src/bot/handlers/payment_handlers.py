@@ -4,7 +4,7 @@
 import logging
 import pandas as pd
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler
 
 from ...config.settings import ADMIN_IDS
@@ -12,9 +12,9 @@ import os
 from ...utils.config_utils import load_users, get_user_settings, send_to_log_chat
 from ...database.database_manager import add_payment, get_payments, get_all_records
 from ...utils.payment_utils import (
-    normalize_date, merge_payment_intervals, format_date_for_interval,
-    get_user_id_by_display_name, send_message_to_user
+    normalize_date, merge_payment_intervals, get_user_id_by_display_name, send_message_to_user
 )
+from ...utils.date_utils import safe_parse_date_or_none
 from ..keyboards.inline_keyboards import create_main_menu
 from ..handlers.translation_handlers import _
 
@@ -114,11 +114,13 @@ async def start_add_payment(update: Update, context: CallbackContext):
     
     display_name = query.data.replace("add_payment_", "")
     context.user_data['pay_user'] = display_name
+    context.user_data['messages_to_delete'] = []
     
-    await query.edit_message_text(
+    msg = await query.edit_message_text(
         f"💰 Ավելացնել վճարում {display_name}-ի համար\n\n"
         f"💵 Մուտքագրեք վճարման գումարը:"
     )
+    context.user_data['last_bot_message_id'] = msg.message_id
     
     return PAYMENT_AMOUNT
 
@@ -126,111 +128,59 @@ async def get_payment_amount(update: Update, context: CallbackContext):
     """Получает сумму платежа"""
     try:
         amount = float(update.message.text.strip())
+        if amount <= 0:
+            err_msg = await update.message.reply_text(
+                "❌ Գումարը պետք է լինի դրական թիվ: Մուտքագրեք նորից:"
+            )
+            context.user_data.setdefault('messages_to_delete', []).extend([
+                err_msg.message_id,
+                update.message.message_id
+            ])
+            return PAYMENT_AMOUNT
+        
+        # Удаляем все сообщения, которые нужно удалить
+        ids_to_delete = context.user_data.get('messages_to_delete', [])
+        for msg_id in ids_to_delete:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+            except Exception:
+                pass
+        context.user_data['messages_to_delete'] = []
+        
+        # Удаляем сообщение пользователя
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        
+        # Удаляем последнее сообщение бота
+        last_bot_msg_id = context.user_data.get('last_bot_message_id')
+        if last_bot_msg_id:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+            except Exception:
+                pass
+        
         context.user_data['pay_amount'] = amount
         
         curr_date = datetime.now().strftime('%Y-%m-%d')
         context.user_data['pay_date_from'] = curr_date
         context.user_data['pay_date_to'] = curr_date
         
-        await update.message.reply_text(
+        msg = await update.effective_chat.send_message(
             "📝 Մուտքագրեք մեկնաբանություն (կամ ուղարկեք + բացակայող մեկնաբանության համար):"
         )
+        context.user_data['last_bot_message_id'] = msg.message_id
         
         return PAYMENT_COMMENT
         
     except ValueError:
-        await update.message.reply_text("❌ Սխալ գումար: Մուտքագրեք թիվ:")
+        err_msg = await update.message.reply_text("❌ Սխալ գումար: Մուտքագրեք թիվ:")
+        context.user_data.setdefault('messages_to_delete', []).extend([
+            err_msg.message_id,
+            update.message.message_id
+        ])
         return PAYMENT_AMOUNT
-    
-    try:
-        amount = float(amount_text.replace(',', '.'))
-        if amount <= 0:
-            await update.message.reply_text(
-                "❌ Գումարը պետք է լինի դրական թիվ: Խնդրում ենք նորից մուտքագրել:",
-                reply_markup=create_back_to_menu_keyboard()
-            )
-            return PAYMENT_AMOUNT
-        
-        context.user_data['payment_amount'] = amount
-        
-        await update.message.reply_text(
-            f"💰 Գումար: {amount:,.2f} դրամ\n\n"
-            f"Մուտքագրեք նկարագրությունը (կամ /skip բաց թողնելու համար):",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-        
-        return PAYMENT_DESCRIPTION
-        
-    except ValueError:
-        await update.message.reply_text(
-            "❌ Սխալ գումարի ձևաչափ: Խնդրում ենք մուտքագրել վավեր թիվ:",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-        return PAYMENT_AMOUNT
-
-async def get_payment_description(update: Update, context: CallbackContext):
-    """Получает описание платежа"""
-    user_id = update.effective_user.id
-    
-    if update.message.text == "/skip":
-        description = ""
-    else:
-        description = update.message.text.strip()
-    
-    context.user_data['payment_description'] = description
-    
-    # Сохраняем платеж
-    recipient_name = context.user_data.get('payment_recipient')
-    amount = context.user_data.get('payment_amount')
-    
-    # Создаем запись о платеже
-    current_date = datetime.now().strftime("%d.%m.%Y")
-    payer_name = get_user_display_name(user_id)
-    
-    # Формируем описание платежа
-    payment_desc = f"Վճարում {recipient_name}-ին"
-    if description:
-        payment_desc += f" - {description}"
-    
-    # Добавляем в базу данных
-    record_id = add_record_to_db(
-        date=current_date,
-        supplier=payer_name,
-        direction="Վճարում",
-        description=payment_desc,
-        amount=amount,
-        user_id=user_id
-    )
-    
-    if record_id:
-        # Добавляем в Google Sheets
-        success = add_record_to_sheet(
-            user_id, current_date, payer_name, "Վճարում", payment_desc, amount
-        )
-        
-        success_text = "✅ Գրանցված է գրքապանակում" if success else "⚠️ Գրանցված է միայն տվյալների բազայում"
-        
-        await update.message.reply_text(
-            f"✅ Վճարումը գրանցված է!\n\n"
-            f"📅 Ամսաթիվ: {current_date}\n"
-            f"👤 Վճարող: {payer_name}\n"
-            f"👤 Ստացող: {recipient_name}\n"
-            f"💰 Գումար: {amount:,.2f} դրամ\n"
-            f"📝 Նկարագրություն: {payment_desc}\n\n"
-            f"{success_text}",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-        
-        # Очищаем данные сессии
-        context.user_data.clear()
-        
-    else:
-        await update.message.reply_text(
-            "❌ Սխալ վճարման գրանցման ժամանակ:",
-            reply_markup=create_back_to_menu_keyboard()
-        )
-    
-    return ConversationHandler.END
 
 async def get_payment_period(update: Update, context: CallbackContext):
     """Получает период платежа"""
@@ -257,20 +207,52 @@ async def get_payment_period(update: Update, context: CallbackContext):
             return False
     
     if date_from and not check_is_date(date_from):
-        await update.message.reply_text("❌ Սխալ ամսաթիվ: Մուտքագրեք ամսաթիվը ձևաչափով 2024-01-01:")
+        err_msg = await update.message.reply_text("❌ Սխալ ամսաթիվ: Մուտքագրեք ամսաթիվը ձևաչափով 2024-01-01:")
+        context.user_data.setdefault('messages_to_delete', []).extend([
+            err_msg.message_id,
+            update.message.message_id
+        ])
         return PAYMENT_PERIOD
         
     elif date_to and not check_is_date(date_to):
-        await update.message.reply_text("❌ Սխալ ամսաթիվ: Մուտքագրեք ամսաթիվը ձևաչափով 2024-01-01:")
+        err_msg = await update.message.reply_text("❌ Սխալ ամսաթիվ: Մուտքագրեք ամսաթիվը ձևաչափով 2024-01-01:")
+        context.user_data.setdefault('messages_to_delete', []).extend([
+            err_msg.message_id,
+            update.message.message_id
+        ])
         return PAYMENT_PERIOD
         
     if date_from and date_to and pd.to_datetime(date_from) > pd.to_datetime(date_to):
         date_from, date_to = date_to, date_from
+    
+    # Удаляем все сообщения, которые нужно удалить
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
+    
+    # Удаляем сообщение пользователя
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+    
+    # Удаляем последнее сообщение бота
+    last_bot_msg_id = context.user_data.get('last_bot_message_id')
+    if last_bot_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+        except Exception:
+            pass
         
     context.user_data['pay_date_from'] = date_from
     context.user_data['pay_date_to'] = date_to
     
-    await update.message.reply_text("📝 Մուտքագրեք մեկնաբանություն (կամ ուղարկեք +):")
+    msg = await update.effective_chat.send_message("📝 Մուտքագրեք մեկնաբանություն (կամ ուղարկեք +):")
+    context.user_data['last_bot_message_id'] = msg.message_id
     return PAYMENT_COMMENT
 
 async def get_payment_comment(update: Update, context: CallbackContext):
@@ -280,6 +262,29 @@ async def get_payment_comment(update: Update, context: CallbackContext):
     
     if comment == "+":
         comment = ""
+    
+    # Удаляем все сообщения, которые нужно удалить
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    context.user_data['messages_to_delete'] = []
+    
+    # Удаляем сообщение пользователя
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+    
+    # Удаляем последнее сообщение бота
+    last_bot_msg_id = context.user_data.get('last_bot_message_id')
+    if last_bot_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+        except Exception:
+            pass
         
     display_name = context.user_data['pay_user']
     amount = context.user_data['pay_amount']
@@ -312,7 +317,7 @@ async def get_payment_comment(update: Update, context: CallbackContext):
         
         keyboard = [[InlineKeyboardButton("✅ Վերադառնալ աշխատակցին", callback_data=f"pay_user_{display_name}")]]
         
-        await update.message.reply_text(
+        await update.effective_chat.send_message(
             "✅ Վճարումը հաջողությամբ ավելացված է:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -326,7 +331,7 @@ async def get_payment_comment(update: Update, context: CallbackContext):
         await send_to_log_chat(context, f"Ավելացված է վճարում: {display_name} - {amount:,.2f} դրամ")
         
     else:
-        await update.message.reply_text("❌ Սխալ վճարումն ավելացնելիս:")
+        await update.effective_chat.send_message("❌ Սխալ վճարումն ավելացնելիս:")
     
     # Очищаем данные пользователя
     context.user_data.clear()
@@ -358,8 +363,18 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
                 continue
 
             # Применяем фильтры по датам в зависимости от пользователя
-            record_date = datetime.strptime(record['date'], '%d.%m.%y').date()
-            record['date'] = record_date
+            try:
+                # Безопасное парсинг даты с поддержкой разных форматов
+                record_date = safe_parse_date_or_none(record['date'])
+                
+                if record_date is None:
+                    logger.warning(f"Не удалось распарсить дату '{record['date']}' для записи от {supplier}, пропускаем")
+                    continue
+                    
+                record['date'] = record_date
+            except Exception as e:
+                logger.error(f"Ошибка парсинга даты '{record.get('date')}' для записи от {supplier}: {e}, пропускаем")
+                continue
             if record['supplier'] == "Նարեկ":
                 start_date = datetime.strptime("2025-05-10", '%Y-%m-%d').date()
             else:
@@ -530,9 +545,33 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
 async def cancel_payment(update: Update, context: CallbackContext):
     """Отменяет процесс добавления платежа"""
     user_id = update.effective_user.id
+    
+    # Удаляем все сообщения, которые нужно удалить
+    ids_to_delete = context.user_data.get('messages_to_delete', [])
+    for msg_id in ids_to_delete:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    
+    # Удаляем последнее сообщение бота
+    last_bot_msg_id = context.user_data.get('last_bot_message_id')
+    if last_bot_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
+        except Exception:
+            pass
+    
+    # Удаляем сообщение пользователя, если это текстовое сообщение
+    if update.message:
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+    
     context.user_data.clear()
     
-    await update.message.reply_text(
+    await update.effective_chat.send_message(
         "❌ Վճարման ավելացումը չեղարկված է:",
         reply_markup=create_main_menu(user_id)
     )

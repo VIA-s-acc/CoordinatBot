@@ -5,17 +5,17 @@ import logging
 import json
 import os
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import CallbackContext
 from ...config.settings import ADMIN_IDS
 from ...utils.config_utils import (
-    is_user_allowed, add_allowed_user, remove_allowed_user, 
-    load_allowed_users, get_user_settings, update_user_settings,
+    add_allowed_user, remove_allowed_user, 
+    load_allowed_users, update_user_settings,
     set_log_chat, set_report_settings
 )
-from ...database.database_manager import get_all_records, backup_db_to_dict
+from ...database.database_manager import backup_db_to_dict
 from ...utils.config_utils import (
-    is_user_allowed, set_log_chat, set_report_settings,
+    set_log_chat, set_report_settings,
     add_allowed_user, remove_allowed_user, load_allowed_users,
     load_users, save_users, update_user_settings
 )

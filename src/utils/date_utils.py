@@ -80,3 +80,72 @@ def format_date_for_interval(date_obj):
         return date_obj.strftime('%d.%m.%y')
     except Exception:
         return str(date_obj)
+
+
+def safe_parse_date(date_str: str) -> datetime.date:
+    """
+    Безопасно парсит дату в разных форматах
+    
+    Args:
+        date_str: Строка с датой
+        
+    Returns:
+        datetime.date объект или None если парсинг не удался
+        
+    Raises:
+        ValueError: Если дату не удалось распарсить ни в одном формате
+    """
+    if not date_str or not isinstance(date_str, str):
+        raise ValueError(f"Пустая или неверная дата: {date_str}")
+    
+    date_str = date_str.strip()
+    if not date_str:
+        raise ValueError("Пустая дата после обрезки пробелов")
+    
+    # Список поддерживаемых форматов дат
+    date_formats = [
+        '%d.%m.%y',    # 10.10.24
+        '%d.%m.%Y',    # 10.10.2024
+        '%Y-%m-%d',    # 2024-10-10
+        '%d-%m-%Y',    # 10-10-2024
+        '%d-%m-%y',    # 10-10-24
+        '%d/%m/%Y',    # 10/10/2024
+        '%d/%m/%y',    # 10/10/24
+        '%d․%m․%y',    # 10․10․24 (армянские точки)
+        '%d․%m․%Y',    # 10․10․2024 (армянские точки)
+    ]
+    
+    for fmt in date_formats:
+        try:
+            parsed_date = datetime.strptime(date_str, fmt).date()
+            
+            # Проверяем год: если меньше 50, то это 21 век, иначе 20 век
+            if parsed_date.year < 50:
+                parsed_date = parsed_date.replace(year=parsed_date.year + 2000)
+            elif parsed_date.year < 100:
+                parsed_date = parsed_date.replace(year=parsed_date.year + 1900)
+                
+            logger.debug(f"Успешно распарсили дату '{date_str}' как {parsed_date} с форматом {fmt}")
+            return parsed_date
+        except ValueError:
+            continue
+    
+    # Если ни один формат не подошел
+    raise ValueError(f"Не удалось распарсить дату '{date_str}' ни в одном из поддерживаемых форматов")
+
+
+def safe_parse_date_or_none(date_str: str) -> datetime.date:
+    """
+    Безопасно парсит дату, возвращая None вместо исключения
+    
+    Args:
+        date_str: Строка с датой
+        
+    Returns:
+        datetime.date объект или None если парсинг не удался
+    """
+    try:
+        return safe_parse_date(date_str)
+    except Exception as e:
+        logger.warning(f"Не удалось распарсить дату '{date_str}': {e}")
+        return None

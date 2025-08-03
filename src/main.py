@@ -34,7 +34,7 @@ from src.bot.handlers.button_handlers import button_handler
 from src.bot.handlers.error_handler import error_handler
 from src.config.settings import TOKEN
 from src.database.database_manager import init_db
-from src.utils.config_utils import load_bot_config
+from src.google_integration.async_sheets_worker import start_worker, stop_worker
 
 # Настройка логирования
 logging.basicConfig(
@@ -50,6 +50,10 @@ def main():
         if not init_db():
             logger.error("Не удалось инициализировать базу данных!")
             return
+
+        # Запуск асинхронного воркера для Google Sheets
+        start_worker()
+        logger.info("🔄 Асинхронный воркер Google Sheets запущен")
         
         # Создание приложения
         application = Application.builder().token(TOKEN).build()
@@ -122,9 +126,15 @@ def main():
         
         application.run_polling(allowed_updates=Update.ALL_TYPES)
         
+    except KeyboardInterrupt:
+        logger.info("Получен сигнал остановки")
+        stop_worker()
+        logger.info("Воркер Google Sheets остановлен")
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске бота: {e}")
         print(f"❌ Критическая ошибка: {e}")
+    finally:
+        stop_worker()
 
 if __name__ == '__main__':
     # Инициализация файлов конфигурации, если они не существуют
