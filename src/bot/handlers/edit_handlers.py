@@ -222,6 +222,8 @@ async def get_edit_value(update: Update, context: CallbackContext):
         'amount': 'Գումար'
     }
     # Результат
+    if isinstance(new_value, float):
+        new_value = int(new_value)
     if db_success and sheet_success:
         result_text = f"🟥 '{data_field[field]}' դաշտը թարմացված է '{new_value}' արժեքով"
         record = get_record_from_db(record_id)
