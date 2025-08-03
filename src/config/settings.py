@@ -34,7 +34,7 @@ GOOGLE_SCOPE = [
     'https://www.googleapis.com/auth/drive',
 ]
 GOOGLE_SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
-GOOGLE_SHEET_WORKERS = 4  # Количество воркеров для работы с Google Sheets
+GOOGLE_SHEET_WORKERS = 2  # Количество воркеров для работы с Google Sheets
 
 LOCALIZATION_FILE = os.path.join(BASE_DIR, 'src/config/localization.json')
 
