@@ -160,8 +160,10 @@ async def help_command(update: Update, context: CallbackContext):
             "• /set_user_name [user_id] [name] - Օգտագործողի անվան սահմանում\n"
             "• /export - Տվյալների արտահանում\n"
             "• /sync_sheets - Google Sheets-ի համաժամեցում\n"
-            "• /initialize_sheets - Բոլոր աղյուսակների նախապատրաստում\n\n"
+            "• /initialize_sheets - Բոլոր աղյուսակների նախապատրաստում\n"
             "• /send_data_files - Տվյալների ֆայլերի ուղարկում ադմինիստրատորին\n"
+            "• /set_auto_send_interval [ժամ] - Ավտոմատ ուղարկման ինտերվալ\n"
+            "• /manual_send_data - Մանուալ տվյալների ուղարկում\n\n"
         )
     
     help_text += (

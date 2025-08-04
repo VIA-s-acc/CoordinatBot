@@ -25,7 +25,7 @@ from src.bot.handlers.admin_handlers import (
     set_log_command, set_report_command, allow_user_command, 
     disallow_user_command, allowed_users_command, set_user_name_command,
     export_command, sync_sheets_command, initialize_sheets_command, set_sheet_command,
-    send_data_files_command
+    send_data_files_command, set_auto_send_interval_command, manual_send_data_command
 )
 from src.bot.handlers.admin_commands import clean_duplicates_command
 from src.bot.handlers.search_commands import (
@@ -36,6 +36,7 @@ from src.bot.handlers.error_handler import error_handler
 from src.config.settings import TOKEN
 from src.database.database_manager import init_db
 from src.google_integration.async_sheets_worker import start_worker, stop_worker
+from src.utils.periodic_tasks import start_periodic_tasks, stop_periodic_tasks
 
 
 # Настройка логирования
@@ -95,6 +96,8 @@ def main():
         application.add_handler(CommandHandler("sync_sheets", sync_sheets_command))
         application.add_handler(CommandHandler("initialize_sheets", initialize_sheets_command))
         application.add_handler(CommandHandler("send_data_files", send_data_files_command))
+        application.add_handler(CommandHandler("set_auto_send_interval", set_auto_send_interval_command))
+        application.add_handler(CommandHandler("manual_send_data", manual_send_data_command))
         
         # Отдельные обработчики для специфичных callback'ов (должны быть ДО общего button_handler)
         from src.bot.handlers.edit_handlers import confirm_delete, cancel_edit
@@ -123,6 +126,10 @@ def main():
         # Регистрация обработчика ошибок
         application.add_error_handler(error_handler)
         
+        # Запуск периодических задач
+        start_periodic_tasks(application)
+        logger.info("📅 Периодические задачи запущены")
+        
         # Запуск бота
         logger.info("🚀 Бот запущен в новой модульной архитектуре!")
         print("🚀 Бот запущен! Нажмите Ctrl+C для остановки.")
@@ -131,12 +138,14 @@ def main():
         
     except KeyboardInterrupt:
         logger.info("Получен сигнал остановки")
+        stop_periodic_tasks()
         stop_worker()
         logger.info("Воркер Google Sheets остановлен")
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске бота: {e}")
         print(f"❌ Критическая ошибка: {e}")
     finally:
+        stop_periodic_tasks()
         stop_worker()
 
 if __name__ == '__main__':

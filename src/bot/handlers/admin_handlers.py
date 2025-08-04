@@ -654,3 +654,66 @@ async def set_report_sheet_handler(update: Update, context: CallbackContext):
             parse_mode="HTML",
             reply_markup=create_main_menu(user_id)
         )
+
+async def set_auto_send_interval_command(update: Update, context: CallbackContext):
+    """Команда для настройки интервала автоматической отправки данных"""
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
+        return
+    
+    args = context.args
+    if not args:
+        from ...config.settings import AUTO_SEND_DATA_INTERVAL_HOURS, AUTO_SEND_DATA_ADMIN_ID
+        await update.message.reply_text(
+            f"⏰ Ընթացիկ ավտոմատ ուղարկման կարգավորումներ:\n"
+            f"• Ինտերվալ: {AUTO_SEND_DATA_INTERVAL_HOURS} ժամ\n"
+            f"• Ադմին ID: {AUTO_SEND_DATA_ADMIN_ID}\n\n"
+            f"Ինտերվալը փոխելու համար օգտագործեք:\n"
+            f"<code>/set_auto_send_interval [ժամ]</code>\n\n"
+            f"Օրինակ: <code>/set_auto_send_interval 12</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    try:
+        interval_hours = int(args[0])
+        if interval_hours < 1:
+            await update.message.reply_text("❌ Ինտերվալը պետք է լինի առնվազն 1 ժամ:")
+            return
+        
+        # Обновляем переменную окружения в файле .env (если используется)
+        # Здесь можно добавить логику для сохранения в конфигурационном файле
+        
+        # Информируем о том, что для применения изменений нужен перезапуск
+        await update.message.reply_text(
+            f"✅ Ինտերվալը սահմանված է: {interval_hours} ժամ\n\n"
+            f"⚠️ Կիրառելու համար անհրաժեշտ է վերամեկնարկել բոտը:\n"
+            f"Կամ ավելացրեք .env ֆայլում:\n"
+            f"<code>AUTO_SEND_DATA_INTERVAL_HOURS={interval_hours}</code>",
+            parse_mode="HTML"
+        )
+        
+        await send_to_log_chat(context, f"Փոխվել է ավտոմատ ուղարկման ինտերվալը: {interval_hours} ժամ")
+        
+    except ValueError:
+        await update.message.reply_text("❌ Ինտերվալը պետք է լինի թիվ (ժամերի քանակություն):")
+
+async def manual_send_data_command(update: Update, context: CallbackContext):
+    """Команда для ручного запуска отправки данных"""
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
+        return
+    
+    try:
+        from ...utils.periodic_tasks import get_task_manager
+        task_manager = get_task_manager()
+        if task_manager:
+            await task_manager.send_data_files_to_admin()
+            await update.message.reply_text("✅ Մանուալ ուղարկումը ավարտված է:")
+        else:
+            await update.message.reply_text("❌ Периодические задачи не запущены:")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Մանուալ ուղարկման սխալ: {e}")

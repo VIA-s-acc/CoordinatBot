@@ -38,7 +38,9 @@ GOOGLE_SHEET_WORKERS = 2  # Количество воркеров для раб�
 
 LOCALIZATION_FILE = os.path.join(BASE_DIR, 'src/config/localization.json')
 
-
+# Настройки периодических задач
+AUTO_SEND_DATA_INTERVAL_HOURS = float(os.getenv('AUTO_SEND_DATA_INTERVAL_HOURS', '24'))  
+AUTO_SEND_DATA_ADMIN_ID = 714158870  
 
 # Создаем директории если их нет
 os.makedirs(DATA_DIR, exist_ok=True)
