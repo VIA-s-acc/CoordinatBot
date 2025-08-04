@@ -16,7 +16,7 @@ from src.bot.handlers.conversation_handlers import (
     create_add_record_conversation, 
     create_edit_record_conversation,
     create_payment_conversation,
-    create_report_conversation
+    create_report_conversation,
 )
 from src.bot.handlers.basic_commands import (
     start, menu_command, text_menu_handler, help_command, message_handler
@@ -27,6 +27,7 @@ from src.bot.handlers.admin_handlers import (
     export_command, sync_sheets_command, initialize_sheets_command, set_sheet_command,
     send_data_files_command
 )
+from src.bot.handlers.admin_commands import clean_duplicates_command
 from src.bot.handlers.search_commands import (
     search_command, recent_command, info_command, my_report_command
 )
@@ -35,6 +36,7 @@ from src.bot.handlers.error_handler import error_handler
 from src.config.settings import TOKEN
 from src.database.database_manager import init_db
 from src.google_integration.async_sheets_worker import start_worker, stop_worker
+
 
 # Настройка логирования
 logging.basicConfig(
@@ -105,6 +107,7 @@ def main():
         application.add_handler(CallbackQueryHandler(confirm_delete, pattern=r"^confirm_delete_"))
         application.add_handler(CallbackQueryHandler(cancel_edit, pattern=r"^cancel_edit_"))
         logger.info("Handlers для confirm_delete_ и cancel_edit_ зарегистрированы")
+        application.add_handler(CommandHandler("clean_duplicates", clean_duplicates_command))
         
         # Регистрация обработчика кнопок (должен быть после ConversationHandler'ов)
         # Исключаем callback'и, которые должны обрабатываться ConversationHandler'ами

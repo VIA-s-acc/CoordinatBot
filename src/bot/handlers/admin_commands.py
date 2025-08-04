@@ -271,3 +271,35 @@ async def export_command(update: Update, context: CallbackContext):
         
     except Exception as e:
         await update.message.reply_text(f"❌ Արտահանման սխալ: {e}")
+
+async def clean_duplicates_command(update: Update, context: CallbackContext):
+    """Команда для очистки дублированных записей в базе данных"""
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
+        return
+    
+    try:
+        # Импортируем функцию очистки дубликатов
+        from ...database.database_manager import remove_duplicate_records
+        
+        await update.message.reply_text("🔍 Ուսումնասիրում են տվյալների բազայում կրկնվող գրառումները...")
+        
+        # Выполняем очистку дубликатов
+        removed_count = remove_duplicate_records()
+        
+        if removed_count > 0:
+            await update.message.reply_text(
+                f"✅ Տվյալների բազայի մաքրումը ավարտված է:\n"
+                f"🗑️ Ջնջված կրկնօրինակներ: {removed_count}\n"
+                f"📊 Տվյալների պահոցը այժմ ավելի մաքուր է:"
+            )
+        else:
+            await update.message.reply_text(
+                f"✅ Տվյալների բազայում կրկնօրինակներ չեն գտնվել:\n"
+                f"📊 Տվյալների պահոցը արդեն մաքուր է:"
+            )
+            
+    except Exception as e:
+        logger.error(f"Ошибка очистки дубликатов: {e}")
+        await update.message.reply_text(f"❌ Կրկնօրինակների մաքրման սխալ: {e}")

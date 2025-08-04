@@ -154,14 +154,38 @@ class ReportManager:
             # Получаем все записи из БД
             db_records = get_all_records()
             
-            # Фильтруем записи по пользователю
-            filtered_records = []
+            # ИСПРАВЛЕНИЕ: Дедупликация записей по ID
+            # Создаем словарь для хранения уникальных записей
+            unique_records = {}
+            
+            # Фильтруем записи по пользователю и убираем дубликаты
             for record in db_records:
                 if record['amount'] == 0:
                     continue
                 if record['supplier'] != display_name:
                     continue
                 
+                record_id = record.get('id')
+                if not record_id:
+                    continue
+                
+                # Если запись с таким ID уже есть, берем более новую по updated_at
+                if record_id in unique_records:
+                    existing_updated = unique_records[record_id].get('updated_at', '')
+                    current_updated = record.get('updated_at', '')
+                    
+                    # Сравниваем даты обновления, берем более новую
+                    if current_updated > existing_updated:
+                        unique_records[record_id] = record
+                        logger.info(f"Заменили дубликат записи {record_id}: {existing_updated} -> {current_updated}")
+                    else:
+                        logger.info(f"Пропустили старый дубликат записи {record_id}: {current_updated} <= {existing_updated}")
+                else:
+                    unique_records[record_id] = record
+            
+            # Преобразуем обратно в список и применяем фильтры
+            filtered_records = []
+            for record in unique_records.values():
                 record['date'] = normalize_date(record['date'])
                 
                 # Применяем фильтр по датам (разный для разных пользователей)
@@ -178,6 +202,8 @@ class ReportManager:
                     
                 if record_date >= cutoff_date:
                     filtered_records.append(record)
+            
+            logger.info(f"После дедупликации: {len(unique_records)} уникальных записей, {len(filtered_records)} после фильтрации")
             
             # Группируем по листам
             sheets = {}
@@ -212,7 +238,29 @@ class ReportManager:
                                    update: Update, all_summaries: List[Dict]):
         """Генерирует отчет по отдельному листу"""
         try:
-            df = pd.DataFrame(records)
+            # ИСПРАВЛЕНИЕ: Дополнительная проверка на дубликаты на уровне листа
+            unique_records_dict = {}
+            for record in records:
+                record_id = record.get('id')
+                if record_id:
+                    if record_id in unique_records_dict:
+                        # Если дубликат, берем запись с более новой датой обновления
+                        existing_updated = unique_records_dict[record_id].get('updated_at', '')
+                        current_updated = record.get('updated_at', '')
+                        if current_updated > existing_updated:
+                            unique_records_dict[record_id] = record
+                    else:
+                        unique_records_dict[record_id] = record
+                else:
+                    # Если нет ID, добавляем как есть (не должно происходить)
+                    unique_key = f"no_id_{len(unique_records_dict)}"
+                    unique_records_dict[unique_key] = record
+            
+            # Преобразуем обратно в список
+            deduplicated_records = list(unique_records_dict.values())
+            logger.info(f"Лист {sheet_name}: было {len(records)} записей, после дедупликации {len(deduplicated_records)}")
+            
+            df = pd.DataFrame(deduplicated_records)
             if not df.empty:
                 df['date'] = pd.to_datetime(df['date'], errors='coerce', dayfirst=True)
             else:
@@ -322,7 +370,24 @@ class ReportManager:
                 await update.message.reply_text("📊 Տվյալների բազայում գրառումներ չկան:")
                 return
             
-            df = pd.DataFrame(records)
+            # ИСПРАВЛЕНИЕ: Дедупликация записей по ID для статистики
+            unique_records = {}
+            for record in records:
+                record_id = record.get('id')
+                if record_id:
+                    if record_id in unique_records:
+                        existing_updated = unique_records[record_id].get('updated_at', '')
+                        current_updated = record.get('updated_at', '')
+                        if current_updated > existing_updated:
+                            unique_records[record_id] = record
+                    else:
+                        unique_records[record_id] = record
+            
+            # Преобразуем в список уникальных записей
+            deduplicated_records = list(unique_records.values())
+            logger.info(f"Статистика: было {len(records)} записей, после дедупликации {len(deduplicated_records)}")
+            
+            df = pd.DataFrame(deduplicated_records)
             
             # Общая статистика
             total_records = len(df)

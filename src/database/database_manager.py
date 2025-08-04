@@ -345,6 +345,55 @@ class DatabaseManager:
             logger.error(f"Ошибка получения записей за период: {e}")
             return []
 
+    def remove_duplicate_records(self) -> int:
+        """Удаляет дублированные записи, оставляя самые новые по updated_at"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Находим дублированные записи по id
+            cursor.execute('''
+                SELECT id, COUNT(*) as count 
+                FROM records 
+                GROUP BY id 
+                HAVING COUNT(*) > 1
+            ''')
+            
+            duplicates = cursor.fetchall()
+            logger.info(f"Найдено {len(duplicates)} дублированных ID")
+            
+            removed_count = 0
+            
+            for record_id, count in duplicates:
+                # Получаем все записи с этим ID, сортируем по updated_at
+                cursor.execute('''
+                    SELECT rowid, updated_at 
+                    FROM records 
+                    WHERE id = ? 
+                    ORDER BY updated_at DESC
+                ''', (record_id,))
+                
+                rows = cursor.fetchall()
+                
+                # Оставляем только первую (самую новую), удаляем остальные
+                if len(rows) > 1:
+                    rows_to_delete = [row[0] for row in rows[1:]]  # Все кроме первой
+                    
+                    for rowid in rows_to_delete:
+                        cursor.execute('DELETE FROM records WHERE rowid = ?', (rowid,))
+                        removed_count += 1
+                        logger.info(f"Удален дубликат записи {record_id}, rowid={rowid}")
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Удалено {removed_count} дублированных записей")
+            return removed_count
+
+        except Exception as e:
+            logger.error(f"Ошибка удаления дублированных записей: {e}")
+            return 0
+
 # Создаем глобальный экземпляр менеджера базы данных
 db_manager = DatabaseManager()
 
@@ -390,3 +439,7 @@ def get_payments(user_display_name: str, spreadsheet_id: str, sheet_name: str) -
 def get_records_by_period(start_date: str, end_date: str) -> List[Dict]:
     """Получает записи за указанный период"""
     return db_manager.get_records_by_period(start_date, end_date)
+
+def remove_duplicate_records() -> int:
+    """Удаляет дублированные записи из базы данных"""
+    return db_manager.remove_duplicate_records()
