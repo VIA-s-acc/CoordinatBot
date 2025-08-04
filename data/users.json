@@ -4,72 +4,7 @@
     "active_sheet_name": "Ավան-Կառլեն",
     "display_name": "Գեորգի",
     "reports": [
-      "cb-a3f03fad",
-      "cb-ec8390df",
-      "cb-5e052e4d",
-      "cb-3b1482fc",
-      "cb-50d7994d",
-      "cb-06dc8348",
-      "cb-593441c8",
-      "cb-6ebd769d",
-      "cb-17431e0f",
-      "cb-96dd046f",
-      "cb-9c878d1e",
-      "cb-b68080dc",
-      "cb-6bd6d6da",
-      "cb-58e7f594",
-      "cb-e240079c",
-      "cb-43fd426a",
-      "cb-ff6ea3ef",
-      "cb-d9a3c869",
-      "cb-91469824",
-      "cb-af1176e4",
-      "cb-e4993cc5",
-      "cb-6245a8ee",
-      "cb-9858a7bb",
-      "cb-fe07c996",
-      "cb-f703f3d4",
-      "cb-20d7a92a",
-      "cb-0c16139b",
-      "cb-bed212bc",
-      "cb-a5d555e9",
-      "cb-e140d062",
-      "cb-16d33e8b",
-      "cb-69ad95d1",
-      "cb-5648b397",
-      "cb-a81b4c30",
-      "cb-a69c9ab7",
-      "cb-4cbaabfe",
-      "cb-2f907496",
-      "cb-cf39577b",
-      "cb-8ae19e4a",
-      "cb-574ea027",
-      "cb-2063b2e4",
-      "cb-0abc5e35",
-      "cb-a11dc9e5",
-      "cb-3bfaf49d",
-      "cb-977e827b",
-      "cb-f61fd403",
-      "cb-69dbef95",
-      "cb-eab7f840",
-      "cb-33f3c993",
-      "cb-6c28069e",
-      "cb-6c5ca211",
-      "cb-f4f68133",
-      "cb-032389d9",
-      "cb-36a4bf2e",
-      "cb-305c65ce",
-      "cb-a2a9b380",
-      "cb-4b1dcc7d",
-      "cb-087d5c56",
-      "cb-6459456c",
-      "cb-4f665adc",
-      "cb-4cba0f54",
-      "cb-a47ca607",
-      "cb-a7069b04"
-    ],
-    "notifications": true,
-    "debt_notifications": true
+    ]
   },
   "1023627246": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
@@ -77,29 +12,27 @@
     "name": "User 1023627246",
     "display_name": "Սամվել",
     "reports": [
-      "cb-0a6cca5e",
-      "cb-7c0b46dd",
-      "cb-87186df0",
-      "cb-3992bee2",
-      "cb-e26c1803",
-      "cb-b0d333c6",
-      "cb-d28e3fee",
-      "cb-001b3e1d",
-      "cb-a6710152",
-      "cb-9d48d1c4",
-      "cb-6124417c",
-      "cb-1d85fa96",
-      "cb-2bfbcd56"
     ]
   },
-  "7331677233": {
+  "1200053058": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
     "active_sheet_name": "Ավան-Կառլեն",
-    "display_name": null
+    "display_name": "Տիկո",
+    "reports": [
+    ]
   },
-  "999999999": {
-    "active_spreadsheet_id": null,
-    "active_sheet_name": null,
-    "display_name": null
+  "886272278": {
+    "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
+    "active_sheet_name": "Ավան-Կառլեն",
+    "display_name": "Արմենակ",
+    "reports": [
+    ]
+  },
+  "111111111": {
+    "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
+    "active_sheet_name": "Ավան-Կառլեն",
+    "display_name": null,
+    "reports": [
+    ]
   }
 }
