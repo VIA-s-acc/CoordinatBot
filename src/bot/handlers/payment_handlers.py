@@ -128,15 +128,6 @@ async def get_payment_amount(update: Update, context: CallbackContext):
     """Получает сумму платежа"""
     try:
         amount = float(update.message.text.strip())
-        if amount <= 0:
-            err_msg = await update.message.reply_text(
-                "❌ Գումարը պետք է լինի դրական թիվ: Մուտքագրեք նորից:"
-            )
-            context.user_data.setdefault('messages_to_delete', []).extend([
-                err_msg.message_id,
-                update.message.message_id
-            ])
-            return PAYMENT_AMOUNT
         
         # Удаляем все сообщения, которые нужно удалить
         ids_to_delete = context.user_data.get('messages_to_delete', [])
@@ -379,7 +370,6 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
                 start_date = datetime.strptime("2025-05-10", '%Y-%m-%d').date()
             else:
                 start_date = datetime.strptime("2024-12-05", '%Y-%m-%d').date()
-
             if record_date >= start_date:
                 filtered_records.append(record)
             else:
