@@ -68,6 +68,11 @@ def merge_payment_intervals(df: pd.DataFrame) -> pd.DataFrame:
         NaT используется вместо min/max timestamps для открытых интервалов.
     """
     df = df.copy()
+
+    # Если входной DataFrame пустой, возвращаем его сразу
+    if df.empty:
+        return df
+
     df['date_from'] = pd.to_datetime(df['date_from'], errors='coerce').fillna(pd.Timestamp.min)
     df['date_to'] = pd.to_datetime(df['date_to'], errors='coerce').fillna(pd.Timestamp.max)
     df = df.sort_values(by='date_from').reset_index(drop=True)
