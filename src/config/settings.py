@@ -28,7 +28,7 @@ BOT_CONFIG_FILE = os.path.join(DATA_DIR, 'bot_config.json')
 DATABASE_PATH = os.path.join(DATA_DIR, 'expenses.db')
 
 # Google Sheets конфигурация
-GOOGLE_CREDS_FILE = os.path.join(CREDENTIALS_DIR, 'coordinate-462818-3a816b937055.json')
+GOOGLE_CREDS_FILE = os.path.join(CREDENTIALS_DIR, 'coordinate-462818-c4649309a873.json')
 GOOGLE_SCOPE = [
     'https://spreadsheets.google.com/feeds',
     'https://www.googleapis.com/auth/drive',

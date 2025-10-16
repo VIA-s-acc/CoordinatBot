@@ -18,6 +18,7 @@ from ...utils.config_utils import (
 )
 from ...database.database_manager import backup_db_to_dict, get_record_from_db, add_record_to_db
 from ...google_integration.sheets_manager import get_all_spreadsheets, get_worksheets_info, open_sheet_by_id
+from ...google_integration.sync_manager import full_sync
 from ..keyboards.inline_keyboards import create_main_menu
 from .edit_handlers import get_user_id_by_name
 
@@ -333,85 +334,36 @@ async def export_command(update: Update, context: CallbackContext):
         await update.message.reply_text(f"❌ Արտահանման սխալ: {e}")
 
 async def sync_sheets_command(update: Update, context: CallbackContext):
-    """Синхронизирует данные из Google Sheets в БД"""
+    """Выполняет полную синхронизацию всех Google Sheets с БД"""
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
         return
 
-    from ...utils.config_utils import get_user_settings
-    from ...google_integration.sheets_manager import get_worksheet_by_name
-    from ...database.database_manager import add_record_to_db, get_record_from_db
-    
-    user_settings = get_user_settings(user_id)
-    spreadsheet_id = user_settings.get('active_spreadsheet_id')
-    sheet_name = user_settings.get('active_sheet_name')
-    
-    if not spreadsheet_id or not sheet_name:
-        await update.message.reply_text("❌ Նախ պետք է ընտրել աղյուսակ և թերթիկ:")
-        return
-
     try:
-        worksheet = get_worksheet_by_name(spreadsheet_id, sheet_name)
-        if not worksheet:
-            await update.message.reply_text("❌ Չհաջողվեց բացել թերթիկը:")
-            return
+        await update.message.reply_text("🔄 Սկսվել է լրիվ համաժամեցում բոլոր աղյուսակների հետ...")
 
-        rows = worksheet.get_all_records()
-        added, updated = 0, 0
-        
-        for row in rows:
-            # Приводим к формату бота
-            record_id = str(row.get('ID', '')).strip()
-            if not record_id:
-                continue  # пропускаем строки без ID
+        # Выполняем полную синхронизацию
+        stats = await full_sync()
 
-            # Приведение даты к YYYY-MM-DD
-            raw_date = str(row.get('ամսաթիվ', '')).replace("․", ".").strip()
-            try:
-                parsed_date = safe_parse_date_or_none(raw_date)
-                if parsed_date:
-                    date_fmt = parsed_date.strftime("%Y-%m-%d")
-                else:
-                    date_fmt = raw_date
-            except Exception:
-                date_fmt = raw_date
-
-            # Приведение суммы к float
-            try:
-                amount = float(str(row.get('Արժեք', '0')).replace(',', '.').replace(' ', ''))
-            except Exception:
-                amount = 0.0
-
-            record = {
-                'id': record_id,
-                'date': date_fmt,
-                'supplier': str(row.get('մատակարար', '')).strip(),
-                'direction': str(row.get('ուղղություն', '')).strip(),
-                'description': str(row.get('ծախսի բնութագիր', '')).strip(),
-                'amount': amount,
-                'spreadsheet_id': spreadsheet_id,
-                'sheet_name': sheet_name
-            }
-
-            db_record = get_record_from_db(record_id)
-            if not db_record:
-                if add_record_to_db(record):
-                    added += 1
-            else:
-                # Можно добавить сравнение и обновление, если хотите
-                updated += 1
-        
-        await update.message.reply_text(
-            f"✅ Սինխրոնիզացիա ավարտված է:\n"
-            f"Ավելացված է {added} նոր գրառում, {updated} արդեն կար:",
-            parse_mode="HTML"
+        # Формируем отчет
+        result_text = (
+            f"✅ Լրիվ համաժամեցումն ավարտված է:\n\n"
+            f"📊 Մշակված աղյուսակներ: {stats['processed_sheets']}\n"
+            f"📋 Համաժամեցված գրառումներ: {stats['synced_records']}\n"
+            f"🆕 Նոր գրառումներ: {stats['new_records']}\n"
         )
-        
-        await send_to_log_chat(context, f"Google Sheets համաժամեցում: +{added} նոր, {updated} այլ")
-        
+
+        if stats['errors'] > 0:
+            result_text += f"❌ Սխալներ: {stats['errors']}\n"
+
+        await update.message.reply_text(result_text, parse_mode="HTML")
+
+        await send_to_log_chat(context, f"Լրիվ համաժամեցում: {stats['processed_sheets']} աղյուսակ, {stats['new_records']} նոր գրառում")
+
     except Exception as e:
-        await update.message.reply_text(f"❌ Սինխրոնիզացիայի սխալ: {e}")
+        logger.error(f"Ошибка полной синхронизации: {e}")
+        await update.message.reply_text(f"❌ Սխալ լրիվ համաժամեցման ժամանակ: {e}")
 
 
 def initialize_and_sync_sheets():
