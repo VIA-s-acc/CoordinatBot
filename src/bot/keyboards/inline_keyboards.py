@@ -2,12 +2,15 @@
 Инлайн клавиатуры для бота
 """
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from ...config.settings import ADMIN_IDS
-from ...utils.config_utils import load_users
+from ...config.settings import ADMIN_IDS, UserRole
+from ...utils.config_utils import (
+    load_users, get_user_role, is_super_admin, is_admin,
+    can_add_records, can_view_payments, is_client, is_secondary
+)
 
 def create_main_menu(user_id=None):
     """Создает главное меню"""
-    # Попытка получить локализованный текст
+    # Используем локализацию (функция _ определена в utils.localization)
     try:
         from ...utils.localization import _
         add_record_text = _("buttons.add_record", user_id)
@@ -19,51 +22,77 @@ def create_main_menu(user_id=None):
         my_payments_text = _("menu.my_payments", user_id)
         analytics_text = _("menu.analytics", user_id)
         settings_text = _("menu.settings", user_id)
-    except:
-        # Fallback на статичный текст
-        add_record_text = "➕ գրառում"
+    except Exception:
+        # Fallback на дефолтные строки (армянский/англ. символы)
+        add_record_text = "➕ Ավելացնել գրառում"
         select_sheet_text = "📋 Ընտրել թերթիկ"
         status_text = "📊 Կարգավիճակ"
         stats_text = "📈 Վիճակագրություն"
         select_spreadsheet_text = "📊 Ընտրել աղյուսակ"
         payments_text = "💸 Վճարներ"
         my_payments_text = "💰 Իմ վճարումները"
-        analytics_text = "📊 Аналитика"
-        settings_text = "⚙️ Настройки"
+        analytics_text = "📊 Վիճակագրություն"
+        settings_text = "⚙️ Կարգավորումներ"
     
+    # Проверяем роль пользователя
+    user_role = get_user_role(user_id) if user_id else None
+
+    # Клиенты не имеют доступа к меню
+    if is_client(user_id):
+        try:
+            from ...utils.localization import _
+            no_access_text = _("notifications.access_denied", user_id)
+        except Exception:
+            no_access_text = "⛔ У вас нет доступа к меню"
+        keyboard = [
+            [InlineKeyboardButton(no_access_text, callback_data="no_access")]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+
     # Создаем красивое структурированное меню
-    keyboard = [
-        # Основные функции - 2 кнопки в ряд
-        [
+    keyboard = []
+
+    # Кнопки для пользователей, которые могут добавлять записи (Admin, Worker)
+    if can_add_records(user_id):
+        keyboard.append([
             InlineKeyboardButton(add_record_text, callback_data="add_record_select_sheet"),
             InlineKeyboardButton(_("buttons.add_skip"), callback_data="add_skip_record_select_sheet")
-            # InlineKeyboardButton(select_sheet_text, callback_data="select_sheet")
-        ],
-        # Информация и статистика - 2 кнопки в ряд
-        [
-            # InlineKeyboardButton(status_text, callback_data="status"),
-            # InlineKeyboardButton(stats_text, callback_data="stats")
-        ],
-        # Настройка таблицы - одна кнопка во всю ширину
-        # [InlineKeyboardButton(select_spreadsheet_text, callback_data="select_spreadsheet")]
-    ]
-    
-    if user_id and user_id in ADMIN_IDS:
-        # Админские функции - по 2 кнопки в ряд
+        ])
+
+    # Админские функции
+    if is_admin(user_id):
         keyboard.extend([
             [
                 InlineKeyboardButton(payments_text, callback_data="pay_menu"),
-                # InlineKeyboardButton(analytics_text, callback_data="analytics_menu")
             ],
-            # [InlineKeyboardButton(settings_text, callback_data="settings_menu")]
         ])
-    else:
-        # Для обычных пользователей - личные функции и настройки
-        keyboard.extend([
-            [
-                InlineKeyboardButton(my_payments_text, callback_data="my_payments"),
-                # InlineKeyboardButton(settings_text, callback_data="settings_menu")
-            ]
+
+    # Просмотр платежей для Worker, Secondary, Admin
+    if can_view_payments(user_id) and not is_admin(user_id):
+        keyboard.append([
+            InlineKeyboardButton(my_payments_text, callback_data="my_payments"),
+        ])
+
+    # Супер-админ: управление ролями
+    if is_super_admin(user_id):
+        try:
+            from ...utils.localization import _
+            role_mgmt_text = _("users.main_menu", user_id)
+        except Exception:
+            role_mgmt_text = "👥 Управление ролями"
+        keyboard.append([
+            InlineKeyboardButton(role_mgmt_text, callback_data="role_menu"),
+        ])
+
+    # Вторичные пользователи: только просмотр
+    if is_secondary(user_id):
+        try:
+            from ...utils.localization import _
+            view_payments_text = _("menu.table", user_id)
+        except Exception:
+            view_payments_text = "👁 Просмотр платежей"
+        keyboard.insert(0, [
+            InlineKeyboardButton(view_payments_text, callback_data="view_payments_secondary")
         ])
     
     return InlineKeyboardMarkup(keyboard)

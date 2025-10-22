@@ -272,45 +272,117 @@ class DatabaseManager:
             return None
 
     # Методы для работы с платежами
-    def add_payment(self, user_display_name: str, spreadsheet_id: str, sheet_name: str, 
-                   amount: float, date_from: str, date_to: str, comment: str) -> bool:
-        """Добавляет платеж"""
+    def add_payment(self, user_display_name: str, spreadsheet_id: str = None,
+                   sheet_name: str = None, amount: float = 0,
+                   date_from: str = None, date_to: str = None,
+                   comment: str = None) -> int:
+        """
+        Добавляет платеж
+
+        Returns:
+            ID добавленного платежа или 0 в случае ошибки
+        """
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            
+
             cursor.execute('''
                 INSERT INTO payments (
-                    user_display_name, spreadsheet_id, sheet_name, amount, 
+                    user_display_name, spreadsheet_id, sheet_name, amount,
                     date_from, date_to, comment
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (user_display_name, spreadsheet_id, sheet_name, amount, 
+            ''', (user_display_name, spreadsheet_id, sheet_name, amount,
                   date_from, date_to, comment))
-            
+
+            payment_id = cursor.lastrowid
             conn.commit()
             conn.close()
-            logger.info(f"Платеж добавлен: {amount} для {user_display_name}")
-            return True
+            logger.info(f"Платеж #{payment_id} добавлен: {amount} для {user_display_name}")
+            return payment_id
 
         except Exception as e:
             logger.error(f"Ошибка добавления платежа: {e}")
-            return False
+            return 0
 
-    def get_payments(self, user_display_name: str, spreadsheet_id: str, 
-                    sheet_name: str) -> List[Tuple]:
-        """Получает платежи пользователя"""
+    def add_payments_batch(self, payments: List[Dict]) -> int:
+        """
+        Выполняет груповую вставку платежей в таблицу payments.
+
+        Args:
+            payments: список словарей с ключами user_display_name, spreadsheet_id, sheet_name,
+                      amount, date_from, date_to, comment
+
+        Returns:
+            Количество успешно вставленных записей.
+        """
+        if not payments:
+            return 0
+
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT amount, date_from, date_to, comment, created_at 
-                FROM payments 
-                WHERE user_display_name = ? AND spreadsheet_id = ? AND sheet_name = ?
-                ORDER BY created_at DESC
-            ''', (user_display_name, spreadsheet_id, sheet_name))
-            
-            result = cursor.fetchall()
+
+            values = []
+            for p in payments:
+                values.append((
+                    p.get('user_display_name'),
+                    p.get('spreadsheet_id'),
+                    p.get('sheet_name'),
+                    p.get('amount', 0),
+                    p.get('date_from'),
+                    p.get('date_to'),
+                    p.get('comment')
+                ))
+
+            cursor.executemany('''
+                INSERT INTO payments (
+                    user_display_name, spreadsheet_id, sheet_name, amount,
+                    date_from, date_to, comment
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', values)
+
+            inserted = cursor.rowcount if cursor.rowcount != -1 else len(values)
+            conn.commit()
+            conn.close()
+
+            logger.info(f"Групповая вставка платежей: добавлено {inserted} записей")
+            return inserted
+
+        except Exception as e:
+            logger.error(f"Ошибка групповой вставки платежей: {e}")
+            return 0
+
+    def get_payments(self, user_display_name: str = None, spreadsheet_id: str = None,
+                    sheet_name: str = None) -> List[Dict]:
+        """
+        Получает платежи пользователя или все платежи
+        Если параметры не указаны, возвращает все платежи
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            if user_display_name and spreadsheet_id and sheet_name:
+                # Получаем платежи конкретного пользователя
+                cursor.execute('''
+                    SELECT id, user_display_name, spreadsheet_id, sheet_name,
+                           amount, date_from, date_to, comment, created_at
+                    FROM payments
+                    WHERE user_display_name = ? AND spreadsheet_id = ? AND sheet_name = ?
+                    ORDER BY created_at DESC
+                ''', (user_display_name, spreadsheet_id, sheet_name))
+            else:
+                # Получаем все платежи
+                cursor.execute('''
+                    SELECT id, user_display_name, spreadsheet_id, sheet_name,
+                           amount, date_from, date_to, comment, created_at
+                    FROM payments
+                    ORDER BY created_at DESC
+                ''')
+
+            rows = cursor.fetchall()
+            result = [dict(row) for row in rows]
             conn.close()
             return result
 
@@ -428,12 +500,55 @@ def backup_db_to_dict() -> Optional[Dict]:
 def get_user_id_by_record_id(record_id: str) -> Optional[int]:
     return db_manager.get_user_id_by_record_id(record_id)
 
-def add_payment(user_display_name: str, spreadsheet_id: str, sheet_name: str, 
-               amount: float, date_from: str, date_to: str, comment: str) -> bool:
-    return db_manager.add_payment(user_display_name, spreadsheet_id, sheet_name, 
-                                 amount, date_from, date_to, comment)
+def add_payment(user_display_name: str, spreadsheet_id: str = None,
+               sheet_name: str = None, amount: float = 0,
+               date_from: str = None, date_to: str = None,
+               comment: str = None) -> int:
+    """
+    Добавляет платеж в БД и синхронизирует с Google Sheets
 
-def get_payments(user_display_name: str, spreadsheet_id: str, sheet_name: str) -> List[Tuple]:
+    Returns:
+        ID добавленного платежа или 0 в случае ошибки
+    """
+    # Добавляем в БД
+    payment_id = db_manager.add_payment(
+        user_display_name, spreadsheet_id, sheet_name,
+        amount, date_from, date_to, comment
+    )
+
+    if payment_id > 0:
+        # Синхронизируем с Google Sheets
+        try:
+            from ..google_integration.payments_sync_manager import PaymentsSyncManager
+            from ..utils.config_utils import get_user_role
+
+            # Определяем роль пользователя по display_name
+            # TODO: улучшить определение роли
+            role = get_user_role(0)  # Временное решение
+            if not role:
+                from ..config.settings import UserRole
+                role = UserRole.WORKER  # По умолчанию
+
+            sync_manager = PaymentsSyncManager()
+            sync_manager.sync_payment_to_sheets(
+                payment_id=payment_id,
+                user_display_name=user_display_name,
+                amount=amount,
+                role=role,
+                date_from=date_from,
+                date_to=date_to,
+                comment=comment,
+                target_spreadsheet_id=spreadsheet_id,
+                target_sheet_name=sheet_name
+            )
+        except Exception as e:
+            logger.error(f"Ошибка синхронизации платежа #{payment_id} с Google Sheets: {e}")
+
+    return payment_id
+
+def get_payments(user_display_name: str = None, spreadsheet_id: str = None,
+                sheet_name: str = None) -> List[Dict]:
+    """Получает платежи пользователя или все платежи"""
     return db_manager.get_payments(user_display_name, spreadsheet_id, sheet_name)
 
 def get_records_by_period(start_date: str, end_date: str) -> List[Dict]:

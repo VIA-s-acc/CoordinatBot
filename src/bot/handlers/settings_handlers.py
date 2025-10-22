@@ -34,7 +34,11 @@ async def settings_menu(update: Update, context: CallbackContext):
         keyboard.extend([
             [InlineKeyboardButton(_("settings.users", user_id), callback_data="user_settings_menu")],
             [InlineKeyboardButton(_("settings.backup", user_id), callback_data="backup_menu")],
-            [InlineKeyboardButton("🔄 Сортировать лист по дате", callback_data="sort_sheet_by_date")],
+            # Локализованная подпись для сортировки листа (фоллбек на русское)
+            [InlineKeyboardButton(
+                (lambda uid: (lambda t: t if t != 'settings.sort_sheet_by_date' else '🔄 Сортировать лист по дате')(_("settings.sort_sheet_by_date", uid)))(user_id),
+                callback_data="sort_sheet_by_date"
+            )],
             [InlineKeyboardButton(_("settings.translation_management", user_id), callback_data="translation_management")],
             [InlineKeyboardButton(_("settings.system_info", user_id), callback_data="system_info")]
         ])
@@ -110,17 +114,25 @@ async def notification_settings(update: Update, context: CallbackContext):
     debt_notifications = settings.get('debt_notifications', True)
     limit_notifications = settings.get('limit_notifications', True)
     
+    # Локализация состояний Вкл/Выкл
+    try:
+        on_text = _("users.yes", user_id)
+        off_text = _("users.no", user_id)
+    except Exception:
+        on_text = 'Вкл'
+        off_text = 'Выкл'
+
     keyboard = [
         [InlineKeyboardButton(
-            f"🔔 Все уведомления: {'Вкл' if notifications_enabled else 'Выкл'}",
+            f"🔔 Все уведомления: {on_text if notifications_enabled else off_text}",
             callback_data="toggle_notifications"
         )],
         [InlineKeyboardButton(
-            f"💰 Уведомления о долгах: {'Вкл' if debt_notifications else 'Выкл'}",
+            f"💰 Уведомления о долгах: {on_text if debt_notifications else off_text}",
             callback_data="toggle_debt_notifications"
         )],
         [InlineKeyboardButton(
-            f"⚠️ Уведомления о лимитах: {'Вкл' if limit_notifications else 'Выкл'}",
+            f"⚠️ Уведомления о лимитах: {on_text if limit_notifications else off_text}",
             callback_data="toggle_limit_notifications"
         )],
         [InlineKeyboardButton(_("menu.back", user_id), callback_data="settings_menu")]
@@ -164,7 +176,11 @@ async def system_info(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
+        try:
+            no_access = _("notifications.access_denied", user_id)
+        except Exception:
+            no_access = "❌ Доступ запрещен"
+        await query.answer(no_access)
         return
     
     await query.answer()
@@ -204,21 +220,35 @@ async def system_info(update: Update, context: CallbackContext):
             lang_name = lang_names.get(lang_code, lang_code)
             info_text += f"  {lang_name}: {count}\n"
         
+        try:
+            update_text = _("buttons.update", user_id)
+            back_text = _("menu.back", user_id)
+        except Exception:
+            update_text = "🔄 Обновить"
+            back_text = "⬅️ Назад"
+
         await query.edit_message_text(
             info_text,
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Обновить", callback_data="system_info")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data="settings_menu")]
+                [InlineKeyboardButton(update_text, callback_data="system_info")],
+                [InlineKeyboardButton(back_text, callback_data="settings_menu")]
             ])
         )
         
     except Exception as e:
         logger.error(f"Ошибка получения системной информации: {e}")
+        try:
+            err_text = _("notifications.error", user_id)
+            back_text = _("menu.back", user_id)
+        except Exception:
+            err_text = "❌ Ошибка получения информации"
+            back_text = "⬅️ Назад"
+
         await query.edit_message_text(
-            f"❌ Ошибка получения информации: {e}",
+            f"{err_text}: {e}",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ Назад", callback_data="settings_menu")]
+                [InlineKeyboardButton(back_text, callback_data="settings_menu")]
             ])
         )
 
@@ -228,7 +258,11 @@ async def sort_sheet_by_date_handler(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
-        await query.answer("❌ Доступ запрещен")
+        try:
+            no_access = _("notifications.access_denied", user_id)
+        except Exception:
+            no_access = "❌ Доступ запрещен"
+        await query.answer(no_access)
         return
     
     await query.answer()
@@ -242,61 +276,89 @@ async def sort_sheet_by_date_handler(update: Update, context: CallbackContext):
         sheet_name = user_settings.get('active_sheet_name')
         
         if not spreadsheet_id or not sheet_name:
+            try:
+                back_text = _("menu.back", user_id)
+            except Exception:
+                back_text = "⬅️ Назад"
+
             await query.edit_message_text(
                 "❌ Նախ պետք է ընտրել աղյուսակը և թերթիկը:\n"
                 "Գնացեք հիմնական ցանկ → Ընտրել աղյուսակ",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Назад", callback_data="settings_menu")]
+                    [InlineKeyboardButton(back_text, callback_data="settings_menu")]
                 ])
             )
             return
         
-        await query.edit_message_text(
-            f"🔄 Сортировка листа по дате...\n\n"
-            f"📊 Աղյուսակ: <b>{spreadsheet_id}</b>\n"
-            f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
-            f"⏳ Пожалуйста, подождите...",
-            parse_mode="HTML"
-        )
+            try:
+                waiting = _("backup.please_wait", user_id)
+            except Exception:
+                waiting = "⏳ Пожалуйста, подождите..."
+
+            await query.edit_message_text(
+                f"🔄 Сортировка листа по дате...\n\n"
+                f"📊 Աղյուսակ: <b>{spreadsheet_id}</b>\n"
+                f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n{waiting}",
+                parse_mode="HTML"
+            )
         
         # Выполняем сортировку
         success = sort_sheet_by_date(spreadsheet_id, sheet_name)
         
-        if success:
-            await query.edit_message_text(
-                f"✅ <b>Сортировка завершена успешно!</b>\n\n"
-                f"📊 Աղյուսակ: <b>{spreadsheet_id}</b>\n"
-                f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
-                f"🎯 Все записи отсортированы по дате\n"
-                f"📅 Более старые записи находятся вверху",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Повторить сортировку", callback_data="sort_sheet_by_date")],
-                    [InlineKeyboardButton("⬅️ Назад", callback_data="settings_menu")]
-                ])
-            )
+            if success:
+                try:
+                    repeat_text = _("buttons.update", user_id)
+                    back_text = _("menu.back", user_id)
+                except Exception:
+                    repeat_text = "🔄 Повторить сортировку"
+                    back_text = "⬅️ Назад"
+
+                await query.edit_message_text(
+                    f"✅ <b>Сортировка завершена успешно!</b>\n\n"
+                    f"📊 Աղյուսակ: <b>{spreadsheet_id}</b>\n"
+                    f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
+                    f"🎯 Все записи отсортированы по дате\n"
+                    f"📅 Более старые записи находятся вверху",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(repeat_text, callback_data="sort_sheet_by_date")],
+                        [InlineKeyboardButton(back_text, callback_data="settings_menu")]
+                    ])
+                )
         else:
-            await query.edit_message_text(
-                f"❌ <b>Ошибка сортировки</b>\n\n"
-                f"Не удалось отсортировать лист. Возможные причины:\n"
-                f"• Нет доступа к листу\n"
-                f"• Лист не найден\n"
-                f"• Проблемы с подключением\n\n"
-                f"Попробуйте позже.",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Повторить", callback_data="sort_sheet_by_date")],
-                    [InlineKeyboardButton("⬅️ Назад", callback_data="settings_menu")]
-                ])
-            )
+                try:
+                    repeat_text = _("buttons.update", user_id)
+                    back_text = _("menu.back", user_id)
+                except Exception:
+                    repeat_text = "🔄 Повторить"
+                    back_text = "⬅️ Назад"
+
+                await query.edit_message_text(
+                    f"❌ <b>Ошибка сортировки</b>\n\n"
+                    f"Не удалось отсортировать лист. Возможные причины:\n"
+                    f"• Нет доступа к листу\n"
+                    f"• Лист не найден\n"
+                    f"• Проблемы с подключением\n\n"
+                    f"Попробуйте позже.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(repeat_text, callback_data="sort_sheet_by_date")],
+                        [InlineKeyboardButton(back_text, callback_data="settings_menu")]
+                    ])
+                )
         
     except Exception as e:
         logger.error(f"Ошибка сортировки листа: {e}")
+        try:
+            back_text = _("menu.back", user_id)
+        except Exception:
+            back_text = "⬅️ Назад"
+
         await query.edit_message_text(
             f"❌ <b>Критическая ошибка</b>\n\n"
             f"<code>{str(e)}</code>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ Назад", callback_data="settings_menu")]
+                [InlineKeyboardButton(back_text, callback_data="settings_menu")]
             ])
         )

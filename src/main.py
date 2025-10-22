@@ -9,14 +9,21 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
 
 # Импорты модулей
 from src.bot.handlers.conversation_handlers import (
-    create_add_record_conversation, 
+    create_add_record_conversation,
     create_edit_record_conversation,
     create_payment_conversation,
     create_report_conversation,
+)
+from src.bot.handlers.role_management_handlers import (
+    role_management_menu, list_all_users, view_secondary_users,
+    start_add_user, receive_user_id, receive_display_name, set_role_for_new_user,
+    start_change_role, select_new_role, apply_new_role,
+    start_remove_user, confirm_remove_user, cancel_role_operation,
+    INPUT_USER_ID, INPUT_DISPLAY_NAME, SELECT_ROLE
 )
 from src.bot.handlers.basic_commands import (
     start, menu_command, text_menu_handler, help_command, message_handler
@@ -53,10 +60,50 @@ def main():
             logger.error("Не удалось инициализировать базу данных!")
             return
 
+        # Миграция пользователей к системе ролей (если требуется)
+        try:
+            from src.utils.migrate_users_roles import auto_migrate_if_needed
+            logger.info("🔄 Проверка необходимости миграции пользователей...")
+            auto_migrate_if_needed()
+        except Exception as e:
+            logger.error(f"❌ Ошибка при миграции пользователей: {e}", exc_info=True)
+
         # Запуск асинхронного воркера для Google Sheets
         start_worker()
         logger.info("🔄 Асинхронный воркер Google Sheets запущен")
-        
+
+        # Инициализация таблицы платежей и синхронизация
+        try:
+            from src.google_integration.payments_sheets_manager import PaymentsSheetsManager
+            from src.google_integration.payments_sync_manager import PaymentsSyncManager
+            from src.config.settings import PAYMENTS_SPREADSHEET_ID
+
+            if PAYMENTS_SPREADSHEET_ID:
+                logger.info("📊 Инициализация таблицы платежей...")
+                payments_sheets = PaymentsSheetsManager()
+
+                if payments_sheets.initialize_payment_sheets():
+                    logger.info("✅ Таблица платежей инициализирована")
+
+                    # Синхронизация платежей
+                    logger.info("🔄 Синхронизация платежей...")
+                    sync_manager = PaymentsSyncManager()
+                    stats = sync_manager.full_sync_payments()
+
+                    logger.info(
+                        f"✅ Синхронизация платежей завершена. "
+                        f"Добавлено: {stats['added']}, "
+                        f"Пропущено: {stats['skipped']}, "
+                        f"Ошибок: {stats['errors']}"
+                    )
+                else:
+                    logger.warning("⚠️ Не удалось инициализировать таблицу платежей")
+            else:
+                logger.warning("⚠️ PAYMENTS_SPREADSHEET_ID не установлен. Синхронизация платежей отключена.")
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка при инициализации платежей: {e}", exc_info=True)
+
         # Создание приложения
         application = Application.builder().token(TOKEN).build()
         
@@ -65,17 +112,32 @@ def main():
         edit_record_conv = create_edit_record_conversation()
         payment_conv = create_payment_conversation()
         report_conv = create_report_conversation()
-        
+
+        # ConversationHandler для добавления пользователя
+        add_user_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(start_add_user, pattern="^role_add_user$")],
+            states={
+                INPUT_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_user_id)],
+                INPUT_DISPLAY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_display_name)],
+                SELECT_ROLE: [CallbackQueryHandler(set_role_for_new_user, pattern="^setrole_")]
+            },
+            fallbacks=[CallbackQueryHandler(cancel_role_operation, pattern="^role_menu$")],
+            name="add_user_conversation",
+            persistent=False
+        )
+
         # Регистрация ConversationHandler'ов (должны быть первыми)
         application.add_handler(add_record_conv)
         application.add_handler(edit_record_conv)
         application.add_handler(payment_conv)
         application.add_handler(report_conv)
+        application.add_handler(add_user_conv)
         
         # Регистрация обработчиков команд
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("menu", menu_command))
         application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("roles", role_management_menu))
         
         # Команды поиска и информации
         application.add_handler(CommandHandler("search", search_command))
@@ -108,12 +170,22 @@ def main():
         application.add_handler(CallbackQueryHandler(cancel_edit, pattern=r"^cancel_edit_"))
         logger.info("Handlers для confirm_delete_ и cancel_edit_ зарегистрированы")
         application.add_handler(CommandHandler("clean_duplicates", clean_duplicates_command))
-        
+
+        # Регистрация обработчиков управления ролями
+        application.add_handler(CallbackQueryHandler(role_management_menu, pattern="^role_menu$"))
+        application.add_handler(CallbackQueryHandler(list_all_users, pattern="^role_list_users$"))
+        application.add_handler(CallbackQueryHandler(view_secondary_users, pattern="^role_view_secondary$"))
+        application.add_handler(CallbackQueryHandler(start_change_role, pattern="^role_change_role$"))
+        application.add_handler(CallbackQueryHandler(select_new_role, pattern="^changerole_user_"))
+        application.add_handler(CallbackQueryHandler(apply_new_role, pattern="^newrole_"))
+        application.add_handler(CallbackQueryHandler(start_remove_user, pattern="^role_remove_user$"))
+        application.add_handler(CallbackQueryHandler(confirm_remove_user, pattern="^removeuser_confirm_"))
+
         # Регистрация обработчика кнопок (должен быть после ConversationHandler'ов)
         # Исключаем callback'и, которые должны обрабатываться ConversationHandler'ами
         application.add_handler(CallbackQueryHandler(
-            button_handler, 
-            pattern=r"^(?!add_record_sheet_|add_skip_sheet_|add_record_select_sheet$|use_my_name$|use_firm_name$|manual_input$|edit_record_|confirm_delete_|cancel_edit_|add_payment_|confirm_payment_).*"
+            button_handler,
+            pattern=r"^(?!add_record_sheet_|add_skip_sheet_|add_record_select_sheet$|use_my_name$|use_firm_name$|manual_input$|edit_record_|confirm_delete_|cancel_edit_|add_payment_|confirm_payment_|role_|changerole_|newrole_|removeuser_|setrole_).*"
         ))
         
         # Регистрация обработчиков сообщений

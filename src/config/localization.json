@@ -541,6 +541,10 @@
       "record_saved": "✅ Record saved!",
       "payment_saved": "✅ Payment saved!"
     },
+    "payments": {
+      "add": "➕ Add Payment",
+      "get_report": "📊 Get Payment Report"
+    },
     "translation": {
       "main_menu": "🌐 Translation Management",
       "menu_description": "Choose action:",

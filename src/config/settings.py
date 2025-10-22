@@ -12,9 +12,20 @@ TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # ID администраторов
 ADMIN_IDS = [
-    int(x.strip()) for x in os.getenv('ADMIN_IDS', '').split(',') 
+    int(x.strip()) for x in os.getenv('ADMIN_IDS', '').split(',')
     if x.strip().isdigit()
 ]
+
+# ID супер-администратора (может управлять ролями через бота)
+SUPER_ADMIN_ID = int(os.getenv('SUPER_ADMIN_ID', '0')) if os.getenv('SUPER_ADMIN_ID') else None
+
+# Роли пользователей
+class UserRole:
+    SUPER_ADMIN = 'super_admin'  # Супер-администратор (управление ролями)
+    ADMIN = 'admin'               # Администратор (текущие админы)
+    WORKER = 'worker'             # Работник (текущие обычные пользователи)
+    SECONDARY = 'secondary'       # Вторичный (только просмотр платежей)
+    CLIENT = 'client'             # Клиент (только получение уведомлений)
 
 # Пути к файлам
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,6 +46,9 @@ GOOGLE_SCOPE = [
 ]
 GOOGLE_SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 GOOGLE_SHEET_WORKERS = 2  # Количество воркеров для работы с Google Sheets
+
+# ID таблицы для хранения платежей (отдельная от основной)
+PAYMENTS_SPREADSHEET_ID = os.getenv('PAYMENTS_SPREADSHEET_ID')
 
 LOCALIZATION_FILE = os.path.join(BASE_DIR, 'src/config/localization.json')
 

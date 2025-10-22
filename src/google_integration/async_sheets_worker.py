@@ -19,6 +19,9 @@ class TaskType(Enum):
     ADD_RECORD = "add_record"
     UPDATE_RECORD = "update_record"
     DELETE_RECORD = "delete_record"
+    ADD_PAYMENT = "add_payment"
+    UPDATE_PAYMENT = "update_payment"
+    DELETE_PAYMENT = "delete_payment"
 
 
 @dataclass
@@ -104,19 +107,42 @@ class AsyncSheetsWorker:
         try:
             logger.debug(f"Обработка задачи {task.task_type.value} для {task.record_id}")
             success = False
-            
+
             if task.task_type == TaskType.ADD_RECORD:
                 success = sheets_manager.add_record_to_sheet(
                     task.spreadsheet_id, task.sheet_name, task.data
                 )
             elif task.task_type == TaskType.UPDATE_RECORD:
                 success = sheets_manager.update_record_in_sheet(
-                    task.spreadsheet_id, task.sheet_name, 
+                    task.spreadsheet_id, task.sheet_name,
                     task.record_id, task.data['field'], task.data['value']
                 )
             elif task.task_type == TaskType.DELETE_RECORD:
                 success = sheets_manager.delete_record_from_sheet(
                     task.spreadsheet_id, task.sheet_name, task.record_id
+                )
+            elif task.task_type == TaskType.ADD_PAYMENT:
+                # Обработка добавления платежа
+                from .payments_sheets_manager import PaymentsSheetsManager
+                payments_manager = PaymentsSheetsManager()
+                success = payments_manager.add_payment_to_sheet(
+                    payment_id=task.data['payment_id'],
+                    user_display_name=task.data['user_display_name'],
+                    amount=task.data['amount'],
+                    date_from=task.data.get('date_from'),
+                    date_to=task.data.get('date_to'),
+                    comment=task.data.get('comment'),
+                    role=task.data['role'],
+                    target_spreadsheet_id=task.data.get('target_spreadsheet_id'),
+                    target_sheet_name=task.data.get('target_sheet_name')
+                )
+            elif task.task_type == TaskType.DELETE_PAYMENT:
+                # Обработка удаления платежа
+                from .payments_sheets_manager import PaymentsSheetsManager
+                payments_manager = PaymentsSheetsManager()
+                success = payments_manager.delete_payment_from_sheet(
+                    payment_id=int(task.record_id),
+                    role=task.data['role']
                 )
             else:
                 logger.error(f"Неизвестный тип задачи: {task.task_type}")
@@ -237,3 +263,81 @@ def start_worker():
 def stop_worker():
     """Останавливает воркер (вызывается при остановке бота)"""
     sheets_worker.stop()
+
+
+def add_payment_async(payment_id: int, user_display_name: str, amount: float,
+                     role: str, date_from: str = None, date_to: str = None,
+                     comment: str = None, target_spreadsheet_id: str = None,
+                     target_sheet_name: str = None, callback: Optional[callable] = None):
+    """
+    Асинхронно добавляет платеж в Google Sheets
+
+    Args:
+        payment_id: ID платежа в БД
+        user_display_name: Имя получателя
+        amount: Сумма
+        role: Роль пользователя (определяет лист)
+        date_from: Начало периода
+        date_to: Конец периода
+        comment: Комментарий
+        target_spreadsheet_id: ID таблицы для двойной записи
+        target_sheet_name: Имя листа для двойной записи
+        callback: Callback функция
+    """
+    from ..config.settings import PAYMENTS_SPREADSHEET_ID
+
+    if not PAYMENTS_SPREADSHEET_ID:
+        logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+        if callback:
+            callback(False, "PAYMENTS_SPREADSHEET_ID не установлен")
+        return
+
+    task = SheetsTask(
+        task_type=TaskType.ADD_PAYMENT,
+        spreadsheet_id=PAYMENTS_SPREADSHEET_ID,
+        sheet_name='',  # Название листа определится по роли
+        record_id=str(payment_id),
+        data={
+            'payment_id': payment_id,
+            'user_display_name': user_display_name,
+            'amount': amount,
+            'role': role,
+            'date_from': date_from,
+            'date_to': date_to,
+            'comment': comment,
+            'target_spreadsheet_id': target_spreadsheet_id,
+            'target_sheet_name': target_sheet_name
+        },
+        callback=callback
+    )
+    sheets_worker.add_task(task)
+    logger.info(f"Добавлена задача на запись платежа #{payment_id} в очередь")
+
+
+def delete_payment_async(payment_id: int, role: str, callback: Optional[callable] = None):
+    """
+    Асинхронно удаляет платеж из Google Sheets
+
+    Args:
+        payment_id: ID платежа
+        role: Роль пользователя (определяет лист)
+        callback: Callback функция
+    """
+    from ..config.settings import PAYMENTS_SPREADSHEET_ID
+
+    if not PAYMENTS_SPREADSHEET_ID:
+        logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+        if callback:
+            callback(False, "PAYMENTS_SPREADSHEET_ID не установлен")
+        return
+
+    task = SheetsTask(
+        task_type=TaskType.DELETE_PAYMENT,
+        spreadsheet_id=PAYMENTS_SPREADSHEET_ID,
+        sheet_name='',
+        record_id=str(payment_id),
+        data={'role': role},
+        callback=callback
+    )
+    sheets_worker.add_task(task)
+    logger.info(f"Добавлена задача на удаление платежа #{payment_id} в очередь")

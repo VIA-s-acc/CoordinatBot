@@ -1,9 +1,10 @@
 {
   "714158870": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
-    "active_sheet_name": "Այլ ծախսեր",
+    "active_sheet_name": "Արփի ԱՅԲ",
     "display_name": "Գեորգի",
-    "reports": []
+    "reports": [],
+    "role": "super_admin"
   },
   "1023627246": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
@@ -65,8 +66,10 @@
       "cb-03eb5862",
       "cb-ebf69666",
       "cb-600793d1",
-      "cb-1e093398"
-    ]
+      "cb-1e093398",
+      "cb-663debce"
+    ],
+    "role": "admin"
   },
   "1200053058": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
@@ -178,8 +181,24 @@
       "cb-c1fe6a6c",
       "cb-1a1d10e3",
       "cb-50541240",
-      "cb-0d0f201d"
-    ]
+      "cb-0d0f201d",
+      "cb-dd446514",
+      "cb-e93fe17b",
+      "cb-2c21eff4",
+      "cb-f72812d3",
+      "cb-b2a94044",
+      "cb-6d966c06",
+      "cb-38963574",
+      "cb-87dc9385",
+      "cb-d2887bcb",
+      "cb-dcdb6150",
+      "cb-d6b25854",
+      "cb-b3a849f5",
+      "cb-a5fba878",
+      "cb-eca8996a",
+      "cb-36c7122e"
+    ],
+    "role": "worker"
   },
   "886272278": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
@@ -249,8 +268,19 @@
       "cb-8a0ca034",
       "cb-60399a37",
       "cb-97212808",
-      "cb-346a2299"
-    ]
+      "cb-346a2299",
+      "cb-25f7a986",
+      "cb-83a76ed2",
+      "cb-91cc492d",
+      "cb-e8e9b1a7",
+      "cb-e440d790",
+      "cb-35e90877",
+      "cb-9415a1f6",
+      "cb-14e82d85",
+      "cb-a17a1182",
+      "cb-a1cdb77a"
+    ],
+    "role": "worker"
   },
   "123456789012345656": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
@@ -260,7 +290,7 @@
   },
   "718839192": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
-    "active_sheet_name": "Սև Սպիտակ",
+    "active_sheet_name": "Բռոքեռ",
     "display_name": "Նարեկ",
     "reports": [
       "cb-72c2da58",
@@ -277,8 +307,12 @@
       "cb-284d9ef0",
       "cb-3ae6c16c",
       "cb-0b591b85",
-      "cb-ea652fe1"
-    ]
+      "cb-ea652fe1",
+      "cb-53a08151",
+      "cb-c4fb8960",
+      "cb-37e76510"
+    ],
+    "role": "worker"
   },
   "111111111": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
@@ -291,5 +325,11 @@
     "active_sheet_name": null,
     "name": "Vi",
     "display_name": null
+  },
+  "1": {
+    "active_spreadsheet_id": null,
+    "active_sheet_name": null,
+    "display_name": "тест",
+    "role": "secondary"
   }
 }

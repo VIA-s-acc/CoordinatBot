@@ -139,6 +139,130 @@ def get_user_display_name(user_id: int) -> str:
     if user:
         return user.get('display_name')
     return None
+
+# Функции для работы с ролями
+def get_user_role(user_id: int) -> str:
+    """
+    Получает роль пользователя
+    Возвращает роль из users.json или определяет по ADMIN_IDS/SUPER_ADMIN_ID
+    """
+    from ..config.settings import ADMIN_IDS, SUPER_ADMIN_ID, UserRole
+
+    # Проверяем супер-админа
+    if SUPER_ADMIN_ID and user_id == SUPER_ADMIN_ID:
+        return UserRole.SUPER_ADMIN
+
+    # Проверяем роль в файле users.json
+    users = load_users()
+    user_id_str = str(user_id)
+
+    if user_id_str in users and 'role' in users[user_id_str]:
+        return users[user_id_str]['role']
+
+    # Если роли нет, определяем по ADMIN_IDS
+    if user_id in ADMIN_IDS:
+        return UserRole.ADMIN
+
+    # Если пользователь в allowed_users, значит worker
+    if is_user_allowed(user_id):
+        return UserRole.WORKER
+
+    # По умолчанию - нет роли
+    return None
+
+def set_user_role(user_id: int, role: str):
+    """Устанавливает роль пользователя"""
+    users = load_users()
+    user_id_str = str(user_id)
+
+    if user_id_str not in users:
+        users[user_id_str] = {
+            'active_spreadsheet_id': None,
+            'active_sheet_name': None,
+            'display_name': None
+        }
+
+    users[user_id_str]['role'] = role
+    save_users(users)
+
+def get_users_by_role(role: str) -> list:
+    """Возвращает список user_id пользователей с заданной ролью"""
+    users = load_users()
+    result = []
+
+    for user_id_str, user_data in users.items():
+        if user_data.get('role') == role:
+            result.append(int(user_id_str))
+
+    return result
+
+def has_role(user_id: int, *roles) -> bool:
+    """Проверяет, имеет ли пользователь одну из указанных ролей"""
+    user_role = get_user_role(user_id)
+    return user_role in roles
+
+def is_super_admin(user_id: int) -> bool:
+    """Проверяет, является ли пользователь супер-администратором"""
+    from ..config.settings import UserRole
+    return get_user_role(user_id) == UserRole.SUPER_ADMIN
+
+def is_admin(user_id: int) -> bool:
+    """Проверяет, является ли пользователь администратором или супер-админом"""
+    from ..config.settings import UserRole
+    return has_role(user_id, UserRole.SUPER_ADMIN, UserRole.ADMIN)
+
+def is_worker(user_id: int) -> bool:
+    """Проверяет, является ли пользователь работником"""
+    from ..config.settings import UserRole
+    return has_role(user_id, UserRole.WORKER)
+
+def is_secondary(user_id: int) -> bool:
+    """Проверяет, является ли пользователь вторичным (read-only)"""
+    from ..config.settings import UserRole
+    return get_user_role(user_id) == UserRole.SECONDARY
+
+def is_client(user_id: int) -> bool:
+    """Проверяет, является ли пользователь клиентом"""
+    from ..config.settings import UserRole
+    return get_user_role(user_id) == UserRole.CLIENT
+
+def can_add_records(user_id: int) -> bool:
+    """Проверяет, может ли пользователь добавлять записи"""
+    from ..config.settings import UserRole
+    return has_role(user_id, UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER)
+
+def can_edit_records(user_id: int) -> bool:
+    """Проверяет, может ли пользователь редактировать записи"""
+    from ..config.settings import UserRole
+    return has_role(user_id, UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER)
+
+def can_view_payments(user_id: int) -> bool:
+    """Проверяет, может ли пользователь просматривать платежи"""
+    from ..config.settings import UserRole
+    return has_role(user_id, UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER, UserRole.SECONDARY)
+
+def can_add_payments(user_id: int) -> bool:
+    """Проверяет, может ли пользователь добавлять платежи"""
+    from ..config.settings import UserRole
+    return has_role(user_id, UserRole.SUPER_ADMIN, UserRole.ADMIN)
+
+def can_manage_users(user_id: int) -> bool:
+    """Проверяет, может ли пользователь управлять другими пользователями"""
+    return is_super_admin(user_id)
+
+def get_role_display_name(role: str) -> str:
+    """Возвращает отображаемое имя роли на армянском"""
+    from ..config.settings import UserRole
+
+    role_names = {
+        UserRole.SUPER_ADMIN: 'Գլխավոր ադմինիստրատոր',
+        UserRole.ADMIN: 'Ադմինիստրատոր',
+        UserRole.WORKER: 'Աշխատող',
+        UserRole.SECONDARY: 'Երկրորդային',
+        UserRole.CLIENT: 'Կլիենտ'
+    }
+
+    return role_names.get(role, 'Անհայտ')
 # --- Асинхронная функция для отправки сообщений в лог-чат ---
 from telegram.ext import CallbackContext
 

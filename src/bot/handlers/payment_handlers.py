@@ -75,7 +75,8 @@ async def pay_menu_handler(update: Update, context: CallbackContext):
                 udata['display_name'], 
                 callback_data=f"pay_user_{udata['display_name']}"
             )])
-    keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")])
+    user_id = update.effective_user.id
+    keyboard.append([InlineKeyboardButton(_("menu.back", user_id), callback_data="back_to_menu")])
     
     await query.edit_message_text(
         "👥 Ընտրեք աշխատակցին:",
@@ -92,10 +93,11 @@ async def pay_user_handler(update: Update, context: CallbackContext):
         return
     
     display_name = query.data.replace("pay_user_", "")
+    user_id = update.effective_user.id
     keyboard = [
-        [InlineKeyboardButton("➕ Ավելացնել վճարում", callback_data=f"add_payment_{display_name}")],
-        [InlineKeyboardButton("📊 Ստանալ սահմանի հաշվետվություն", callback_data=f"get_payment_report_{display_name}")],
-        [InlineKeyboardButton("⬅️ Հետ", callback_data="pay_menu")]
+        [InlineKeyboardButton(_("payments.add", user_id), callback_data=f"add_payment_{display_name}")],
+        [InlineKeyboardButton(_("payments.get_report", user_id), callback_data=f"get_payment_report_{display_name}")],
+        [InlineKeyboardButton(_("menu.back", user_id), callback_data="pay_menu")]
     ]
     
     await query.edit_message_text(
@@ -117,8 +119,8 @@ async def start_add_payment(update: Update, context: CallbackContext):
     context.user_data['messages_to_delete'] = []
     
     msg = await query.edit_message_text(
-        f"💰 Ավելացնել վճարում {display_name}-ի համար\n\n"
-        f"💵 Մուտքագրեք վճարման գումարը:"
+        f"💰 {display_name} - {_('payments.add', user_id)}\n\n"
+        f"{_('messages.enter_amount', user_id)}"
     )
     context.user_data['last_bot_message_id'] = msg.message_id
     
@@ -158,9 +160,7 @@ async def get_payment_amount(update: Update, context: CallbackContext):
         context.user_data['pay_date_from'] = curr_date
         context.user_data['pay_date_to'] = curr_date
         
-        msg = await update.effective_chat.send_message(
-            "📝 Մուտքագրեք մեկնաբանություն (կամ ուղարկեք + բացակայող մեկնաբանության համար):"
-        )
+        msg = await update.effective_chat.send_message(_("messages.enter_description", user_id))
         context.user_data['last_bot_message_id'] = msg.message_id
         
         return PAYMENT_COMMENT
@@ -242,7 +242,7 @@ async def get_payment_period(update: Update, context: CallbackContext):
     context.user_data['pay_date_from'] = date_from
     context.user_data['pay_date_to'] = date_to
     
-    msg = await update.effective_chat.send_message("📝 Մուտքագրեք մեկնաբանություն (կամ ուղարկեք +):")
+    msg = await update.effective_chat.send_message(_("messages.enter_description", user_id))
     context.user_data['last_bot_message_id'] = msg.message_id
     return PAYMENT_COMMENT
 
@@ -306,10 +306,10 @@ async def get_payment_comment(update: Update, context: CallbackContext):
             f"📝 Նկարագրություն: {comment or 'Առանց մեկնաբանության'}\n"
         )
         
-        keyboard = [[InlineKeyboardButton("✅ Վերադառնալ աշխատակցին", callback_data=f"pay_user_{display_name}")]]
-        
+        keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data=f"pay_user_{display_name}")]]
+
         await update.effective_chat.send_message(
-            "✅ Վճարումը հաջողությամբ ավելացված է:",
+            _("messages.payment_saved", user_id),
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
@@ -377,7 +377,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
 
         if not filtered_records:
             user_id = update.effective_user.id
-            back_button = InlineKeyboardButton("⬅️ Հետ", callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
+            back_button = InlineKeyboardButton(_("menu.back", user_id), callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
             await update.callback_query.edit_message_text(
                 f"📊 {display_name}-ի համար գրառումներ չեն գտնվել:",
                 reply_markup=InlineKeyboardMarkup([[back_button]])
@@ -513,10 +513,10 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
 
         # Кнопка для возврата
         user_id = update.effective_user.id
-        back_button = InlineKeyboardButton("⬅️ Հետ", callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
+        back_button = InlineKeyboardButton(_("menu.back", user_id), callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
         keyboard = [[back_button]]
         await update.callback_query.edit_message_text(
-            f"✅ Հաշվետվությունները ուղարկված են {display_name}-ի համար",
+            f"{_('messages.payment_saved', user_id)} {display_name}-ի համար",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
@@ -525,10 +525,10 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
     except Exception as e:
         logger.error(f"Ошибка создания отчета для {display_name}: {e}")
         user_id = update.effective_user.id
-        back_button = InlineKeyboardButton("⬅️ Հետ", callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
+        back_button = InlineKeyboardButton(_("menu.back", user_id), callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
         keyboard = [[back_button]]
         await update.callback_query.edit_message_text(
-            f"❌ Հաշվետվություն ստեղծելու սխալ: {e}",
+            f"❌ {_('notifications.error', user_id)}: {e}",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
@@ -562,7 +562,7 @@ async def cancel_payment(update: Update, context: CallbackContext):
     context.user_data.clear()
     
     await update.effective_chat.send_message(
-        "❌ Վճարման ավելացումը չեղարկված է:",
+        _("notifications.cancelled", user_id),
         reply_markup=create_main_menu(user_id)
     )
     
