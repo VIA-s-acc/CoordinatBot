@@ -222,12 +222,12 @@ async def button_handler(update: Update, context: CallbackContext):
     elif data == "manual_input":
         return await manual_input(update, context)
     
-    # Редактирование записей
-    elif data.startswith("edit_"):
+    # Редактирование записей (но НЕ платежей!)
+    elif data.startswith("edit_") and not data.startswith(("edit_payment_", "edit_record_")):
         from .edit_handlers import handle_edit_button
         return await handle_edit_button(update, context)
-    
-    elif data.startswith("delete_"):
+
+    elif data.startswith("delete_") and not data.startswith("delete_payment_"):
         from .edit_handlers import handle_delete_button
         return await handle_delete_button(update, context)
     
@@ -247,7 +247,23 @@ async def button_handler(update: Update, context: CallbackContext):
         
     elif data.startswith("get_payment_report_") and user_id in ADMIN_IDS:
         display_name = data.replace("get_payment_report_", "")
-        await send_payment_report(update, context, display_name)
+
+        # Проверяем, есть ли records у этого пользователя
+        from ...database.database_manager import get_all_records
+        db_records = get_all_records()
+        has_records = any(
+            record.get('supplier', '').strip().lower() == display_name.lower()
+            and record.get('amount', 0) > 0
+            for record in db_records
+        )
+
+        if has_records:
+            # Есть records - отправляем полный отчет
+            await send_payment_report(update, context, display_name)
+        else:
+            # Нет records - отправляем только платежи
+            from .payment_management_handlers import send_payments_only_report
+            await send_payments_only_report(update, context, display_name)
         return
     
     # Просмотр платежей для обычных пользователей
@@ -848,13 +864,14 @@ async def show_my_payments(update: Update, context: CallbackContext):
     """Показывает платежи текущего пользователя"""
     query = update.callback_query
     user_id = update.effective_user.id
-    
+
     try:
         # Получаем настройки пользователя
         from ...utils.config_utils import get_user_settings
+        from ...database.database_manager import get_all_records
         user_settings = get_user_settings(user_id)
         display_name = user_settings.get('display_name')
-        
+
         if not display_name:
             await query.edit_message_text(
                 "❌ Ձեր անունը չի սահմանված: Խնդրում ենք դիմել ադմինիստրատորին:",
@@ -863,11 +880,24 @@ async def show_my_payments(update: Update, context: CallbackContext):
                 ])
             )
             return
-        
-        # Импортируем функцию из payment_handlers
-        from .payment_handlers import send_payment_report
-        await send_payment_report(update, context, display_name)
-        
+
+        # Проверяем, есть ли records у этого пользователя
+        db_records = get_all_records()
+        has_records = any(
+            record.get('supplier', '').strip().lower() == display_name.lower()
+            and record.get('amount', 0) > 0
+            for record in db_records
+        )
+
+        if has_records:
+            # Есть records - отправляем полный отчет с расходами и платежами
+            from .payment_handlers import send_payment_report
+            await send_payment_report(update, context, display_name)
+        else:
+            # Нет records - отправляем только платежи
+            from .payment_management_handlers import send_payments_only_report
+            await send_payments_only_report(update, context, display_name)
+
     except Exception as e:
         logger.error(f"Ошибка получения платежей пользователя {user_id}: {e}")
         await query.edit_message_text(
@@ -1786,13 +1816,13 @@ async def add_user_by_id_handler(update: Update, context: CallbackContext):
     context.user_data['waiting_for_user_id'] = True
     context.user_data['message_to_edit'] = query.message
     
-    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_user")]]
+    keyboard = [[InlineKeyboardButton("❌ Չեղարկել", callback_data="cancel_add_user")]]
     
     await query.edit_message_text(
-        "➕ <b>Добавление пользователя по ID</b>\n\n"
-        "📝 Введите ID пользователя (только цифры):\n\n"
-        "💡 <i>Пример: 123456789</i>\n\n"
-        "ℹ️ ID можно получить из настроек Telegram կամ խնդրել օգտվողին ուղարկել /start հրահանգը բոտին",
+        "➕ <b>Ավելացնել օգտատեր ԻԴ - ով</b>\n\n"
+        "📝 ID  (Միայն թվեր):\n\n"
+        "💡 <i>Օրինակ: 123456789</i>\n\n"
+        "ℹ️ ID Telegram կամ խնդրել օգտվողին ուղարկել /start հրահանգը բոտին",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )

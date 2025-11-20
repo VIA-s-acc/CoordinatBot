@@ -136,6 +136,15 @@ class AsyncSheetsWorker:
                     target_spreadsheet_id=task.data.get('target_spreadsheet_id'),
                     target_sheet_name=task.data.get('target_sheet_name')
                 )
+            elif task.task_type == TaskType.UPDATE_PAYMENT:
+                # Обработка обновления платежа
+                from .payments_sheets_manager import PaymentsSheetsManager
+                payments_manager = PaymentsSheetsManager()
+                success = payments_manager.update_payment_in_sheet(
+                    payment_id=int(task.record_id),
+                    role=task.data['role'],
+                    updated_data=task.data.get('updated_data', {})
+                )
             elif task.task_type == TaskType.DELETE_PAYMENT:
                 # Обработка удаления платежа
                 from .payments_sheets_manager import PaymentsSheetsManager
@@ -341,3 +350,37 @@ def delete_payment_async(payment_id: int, role: str, callback: Optional[callable
     )
     sheets_worker.add_task(task)
     logger.info(f"Добавлена задача на удаление платежа #{payment_id} в очередь")
+
+
+def update_payment_async(payment_id: int, role: str, updated_data: Dict,
+                        callback: Optional[callable] = None):
+    """
+    Асинхронно обновляет платеж в Google Sheets
+
+    Args:
+        payment_id: ID платежа
+        role: Роль пользователя (определяет лист)
+        updated_data: Словарь с обновленными данными (amount, date_from, date_to, comment)
+        callback: Callback функция
+    """
+    from ..config.settings import PAYMENTS_SPREADSHEET_ID
+
+    if not PAYMENTS_SPREADSHEET_ID:
+        logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+        if callback:
+            callback(False, "PAYMENTS_SPREADSHEET_ID не установлен")
+        return
+
+    task = SheetsTask(
+        task_type=TaskType.UPDATE_PAYMENT,
+        spreadsheet_id=PAYMENTS_SPREADSHEET_ID,
+        sheet_name='',
+        record_id=str(payment_id),
+        data={
+            'role': role,
+            'updated_data': updated_data
+        },
+        callback=callback
+    )
+    sheets_worker.add_task(task)
+    logger.info(f"Добавлена задача на обновление платежа #{payment_id} в очередь")

@@ -63,17 +63,20 @@ class PaymentsSheetsManager:
 
             # Получаем список существующих листов
             existing_sheets = [ws.title for ws in spreadsheet.worksheets()]
-            logger.info(f"Существующие листы: {existing_sheets}")
 
             # Создаем листы для каждой роли, если их нет
+            sheets_to_create = []
             for role, sheet_name in self.SHEET_NAMES.items():
                 if sheet_name not in existing_sheets:
-                    logger.info(f"Создаем лист для роли {role}: {sheet_name}")
+                    sheets_to_create.append((role, sheet_name))
+
+            if sheets_to_create:
+                logger.info(f"Создаем {len(sheets_to_create)} новых листов...")
+                for role, sheet_name in sheets_to_create:
+                    logger.info(f"  - {sheet_name} (роль: {role})")
                     self._create_payment_sheet(spreadsheet, sheet_name)
-                else:
-                    logger.info(f"Лист {sheet_name} уже существует")
-                    # Проверяем, есть ли заголовки
-                    self._ensure_headers(spreadsheet, sheet_name)
+            else:
+                logger.info("Все необходимые листы уже существуют")
 
             logger.info("✅ Инициализация таблицы платежей завершена")
             return True
@@ -207,6 +210,79 @@ class PaymentsSheetsManager:
             logger.error(f"Ошибка при добавлении платежа в таблицу: {e}", exc_info=True)
             return False
 
+    def add_payments_batch(self, payments: List[Dict], role: str) -> bool:
+        """
+        Пакетная вставка платежей в таблицу (более эффективно)
+
+        Args:
+            payments: Список словарей с данными платежей
+                Каждый словарь должен содержать:
+                - payment_id: int
+                - user_display_name: str
+                - amount: float
+                - date_from: Optional[str]
+                - date_to: Optional[str]
+                - comment: Optional[str]
+                - target_spreadsheet_id: Optional[str]
+                - target_sheet_name: Optional[str]
+            role: Роль пользователя (определяет лист)
+
+        Returns:
+            True если успешно, False если ошибка
+        """
+        if not self.spreadsheet_id:
+            logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+            return False
+
+        if not payments:
+            logger.info("Нет платежей для пакетной вставки")
+            return True
+
+        try:
+            # Получаем название листа для роли
+            sheet_name = self.get_sheet_name_for_role(role)
+            if not sheet_name:
+                logger.error(f"Не найден лист для роли: {role}")
+                return False
+
+            # Открываем таблицу и лист
+            spreadsheet = self.sheets_manager.open_sheet_by_id(self.spreadsheet_id)
+            if not spreadsheet:
+                logger.error(f"Не удалось открыть таблицу: {self.spreadsheet_id}")
+                return False
+
+            worksheet = spreadsheet.worksheet(sheet_name)
+
+            # Подготавливаем данные для пакетной вставки
+            rows_data = []
+            for payment in payments:
+                created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+                row_data = [
+                    str(payment.get('payment_id', '')),
+                    payment.get('user_display_name', ''),
+                    payment.get('amount', 0),
+                    payment.get('date_from', ''),
+                    payment.get('date_to', ''),
+                    payment.get('comment', ''),
+                    created_at,
+                    payment.get('target_spreadsheet_id', ''),
+                    payment.get('target_sheet_name', '')
+                ]
+                rows_data.append(row_data)
+
+            # Пакетная вставка всех строк за один раз
+            worksheet.append_rows(rows_data)
+
+            logger.info(
+                f"✅ Пакетная вставка: {len(payments)} платежей добавлено в лист '{sheet_name}'"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Ошибка при пакетной вставке платежей: {e}", exc_info=True)
+            return False
+
     def get_payments_from_sheet(self, role: str) -> List[Dict]:
         """
         Загружает все платежи из листа указанной роли
@@ -293,6 +369,7 @@ class PaymentsSheetsManager:
             payment_id: ID платежа
             role: Роль (определяет лист)
             updated_data: Словарь с обновленными данными
+                Может содержать: amount, date_from, date_to, comment
 
         Returns:
             True если успешно
@@ -322,10 +399,44 @@ class PaymentsSheetsManager:
                 logger.warning(f"Платеж #{payment_id} не найден в листе '{sheet_name}'")
                 return False
 
-            # Обновляем данные
-            # Здесь можно добавить логику обновления конкретных ячеек
-            # Пока просто логируем
-            logger.info(f"Платеж #{payment_id} найден в строке {row_index}")
+            # Обновляем данные в соответствующих ячейках
+            # Колонки: ID, Անուն, Գումար, Սկզբնական ամսաթիվ, Վերջնական ամսաթիվ, Մեկնաբանություն, ...
+            updates = []
+
+            if 'amount' in updated_data:
+                # Колонка C (3) - Գումար
+                updates.append({
+                    'range': f'C{row_index}',
+                    'values': [[updated_data['amount']]]
+                })
+
+            if 'date_from' in updated_data:
+                # Колонка D (4) - Սկզբնական ամսաթիվ
+                updates.append({
+                    'range': f'D{row_index}',
+                    'values': [[updated_data['date_from'] or '']]
+                })
+
+            if 'date_to' in updated_data:
+                # Колонка E (5) - Վերջնական ամսաթիվ
+                updates.append({
+                    'range': f'E{row_index}',
+                    'values': [[updated_data['date_to'] or '']]
+                })
+
+            if 'comment' in updated_data:
+                # Колонка F (6) - Մեկնաբանություն
+                updates.append({
+                    'range': f'F{row_index}',
+                    'values': [[updated_data['comment'] or '']]
+                })
+
+            # Выполняем пакетное обновление
+            if updates:
+                worksheet.batch_update(updates)
+                logger.info(f"✅ Платеж #{payment_id} обновлен в листе '{sheet_name}' (обновлено полей: {len(updates)})")
+            else:
+                logger.warning(f"Нет данных для обновления платежа #{payment_id}")
 
             return True
 

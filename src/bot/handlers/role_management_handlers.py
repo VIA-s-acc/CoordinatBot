@@ -23,22 +23,22 @@ async def role_management_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await update.message.reply_text("⛔ У вас нет доступа к этой функции.")
+        await update.message.reply_text("⛔ Դուք մուտք չունեք այս գործառույթին:")
         return
 
     keyboard = [
-        [InlineKeyboardButton("➕ Добавить пользователя", callback_data="role_add_user")],
-        [InlineKeyboardButton("👥 Список пользователей", callback_data="role_list_users")],
-        [InlineKeyboardButton("✏️ Изменить роль", callback_data="role_change_role")],
-        [InlineKeyboardButton("🗑 Удалить пользователя", callback_data="role_remove_user")],
-        [InlineKeyboardButton("👁 Вторичные пользователи", callback_data="role_view_secondary")],
-    [InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")]
+        [InlineKeyboardButton("➕ Ավելացնել օգտվող", callback_data="role_add_user")],
+        [InlineKeyboardButton("👥 Օգտվողների ցանկ", callback_data="role_list_users")],
+        [InlineKeyboardButton("✏️ Փոխել դերը", callback_data="role_change_role")],
+        [InlineKeyboardButton("🗑 Ջնջել օգտվողին", callback_data="role_remove_user")],
+        [InlineKeyboardButton("👁 Երկրորդային օգտվողներ", callback_data="role_view_secondary")],
+        [InlineKeyboardButton("🔙 Հետ", callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     message_text = (
-        "👨‍💼 *Управление ролями и пользователями*\n\n"
-        "Доступные действия:"
+        "👨‍💼 *Դերերի և օգտվողների կառավարում*\n\n"
+        "Հասանելի գործողություններ:"
     )
 
     if update.callback_query:
@@ -62,7 +62,7 @@ async def list_all_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return
 
     await query.answer()
@@ -70,9 +70,9 @@ async def list_all_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     if not users:
         await query.edit_message_text(
-            "📋 Список пользователей пуст.",
+            "📋 Օգտվողների ցանկը դատարկ է:",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Назад", callback_data="role_menu")
+                InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")
             ]])
         )
         return
@@ -91,7 +91,7 @@ async def list_all_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message_text = "\n".join(message_lines)
 
-    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="role_menu")]]
+    keyboard = [[InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
@@ -107,7 +107,7 @@ async def view_secondary_users(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return
 
     await query.answer()
@@ -119,7 +119,7 @@ async def view_secondary_users(update: Update, context: ContextTypes.DEFAULT_TYP
             "👁 *Вторичные пользователи*\n\n"
             "Список пуст. Нет пользователей с ролью 'Вторичный'.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Назад", callback_data="role_menu")
+                InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")
             ]]),
             parse_mode='Markdown'
         )
@@ -133,7 +133,7 @@ async def view_secondary_users(update: Update, context: ContextTypes.DEFAULT_TYP
 
     message_text = "\n".join(message_lines)
 
-    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="role_menu")]]
+    keyboard = [[InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
@@ -149,7 +149,7 @@ async def start_add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return
 
     await query.answer()
@@ -172,7 +172,7 @@ async def receive_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await update.message.reply_text("⛔ У вас нет доступа к этой функции.")
+        await update.message.reply_text("⛔ Դուք մուտք չունեք այս գործառույթին:")
         return ConversationHandler.END
 
     try:
@@ -207,7 +207,7 @@ async def receive_display_name(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await update.message.reply_text("⛔ У вас нет доступа к этой функции.")
+        await update.message.reply_text("⛔ Դուք մուտք չունեք այս գործառույթին:")
         return ConversationHandler.END
 
     display_name = update.message.text.strip()
@@ -238,7 +238,7 @@ async def set_role_for_new_user(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return ConversationHandler.END
 
     await query.answer()
@@ -258,7 +258,22 @@ async def set_role_for_new_user(update: Update, context: ContextTypes.DEFAULT_TY
     set_user_role(new_user_id, role)
 
     from ...utils.config_utils import update_user_settings
-    update_user_settings(new_user_id, {'display_name': display_name})
+
+    # Автоматически устанавливаем active_spreadsheet_id из существующего пользователя
+    users = load_users()
+    active_spreadsheet_id = None
+    for uid, user_data in users.items():
+        if user_data.get('active_spreadsheet_id'):
+            active_spreadsheet_id = user_data['active_spreadsheet_id']
+            break
+
+    # Создаем словарь с настройками пользователя
+    user_settings = {'display_name': display_name}
+    if active_spreadsheet_id:
+        user_settings['active_spreadsheet_id'] = active_spreadsheet_id
+        logger.info(f"Автоматически установлен active_spreadsheet_id: {active_spreadsheet_id} для пользователя {new_user_id}")
+
+    update_user_settings(new_user_id, user_settings)
 
     role_display = get_role_display_name(role)
 
@@ -268,7 +283,7 @@ async def set_role_for_new_user(update: Update, context: ContextTypes.DEFAULT_TY
         f"• User ID: `{new_user_id}`\n"
         f"• Роль: {role_display}",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔙 Назад", callback_data="role_menu")
+            InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")
         ]]),
         parse_mode='Markdown'
     )
@@ -286,7 +301,7 @@ async def start_change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return
 
     await query.answer()
@@ -294,22 +309,25 @@ async def start_change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     if not users:
         await query.edit_message_text(
-            "📋 Список пользователей пуст.",
+            "📋 Օգտվողների ցանկը դատարկ է:",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Назад", callback_data="role_menu")
+                InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")
             ]])
         )
         return
 
     keyboard = []
     for user_id_str, user_data in users.items():
-        display_name = user_data.get('display_name', f'User {user_id_str}')
+        display_name = user_data.get('display_name') or f'User {user_id_str}'
+        # Пропускаем пользователей с очень коротким именем (может быть артефакт)
+        if len(display_name.strip()) == 0:
+            display_name = f'User {user_id_str}'
         keyboard.append([InlineKeyboardButton(
             display_name,
             callback_data=f"changerole_user_{user_id_str}"
         )])
 
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="role_menu")])
+    keyboard.append([InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
@@ -326,7 +344,7 @@ async def select_new_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_id = update.effective_user.id
 
     if not is_super_admin(admin_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return
 
     await query.answer()
@@ -343,7 +361,7 @@ async def select_new_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Աշխատող", callback_data=f"newrole_{user_id}_{UserRole.WORKER}")],
         [InlineKeyboardButton("Երկրորդային", callback_data=f"newrole_{user_id}_{UserRole.SECONDARY}")],
         [InlineKeyboardButton("Կլիենտ", callback_data=f"newrole_{user_id}_{UserRole.CLIENT}")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="role_change_role")]
+        [InlineKeyboardButton("🔙 Հետ", callback_data="role_change_role")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -363,7 +381,7 @@ async def apply_new_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_id = update.effective_user.id
 
     if not is_super_admin(admin_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return
 
     await query.answer()
@@ -382,7 +400,7 @@ async def apply_new_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Пользователь: {display_name}\n"
         f"• Новая роль: {role_display}",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔙 Назад", callback_data="role_menu")
+            InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")
         ]]),
         parse_mode='Markdown'
     )
@@ -394,7 +412,7 @@ async def start_remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not is_super_admin(user_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return
 
     await query.answer()
@@ -402,22 +420,25 @@ async def start_remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     if not users:
         await query.edit_message_text(
-            "📋 Список пользователей пуст.",
+            "📋 Օգտվողների ցանկը դատարկ է:",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Назад", callback_data="role_menu")
+                InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")
             ]])
         )
         return
 
     keyboard = []
     for user_id_str, user_data in users.items():
-        display_name = user_data.get('display_name', f'User {user_id_str}')
+        display_name = user_data.get('display_name') or f'User {user_id_str}'
+        # Пропускаем пользователей с очень коротким именем
+        if len(display_name.strip()) == 0:
+            display_name = f'User {user_id_str}'
         keyboard.append([InlineKeyboardButton(
             display_name,
             callback_data=f"removeuser_confirm_{user_id_str}"
         )])
 
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="role_menu")])
+    keyboard.append([InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
@@ -434,7 +455,7 @@ async def confirm_remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE
     admin_id = update.effective_user.id
 
     if not is_super_admin(admin_id):
-        await query.answer("⛔ У вас нет доступа к этой функции.", show_alert=True)
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
         return
 
     await query.answer()
@@ -459,7 +480,7 @@ async def confirm_remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"• {display_name} (`{user_id}`)\n\n"
         "Пользователь больше не имеет доступа к боту.",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔙 Назад", callback_data="role_menu")
+            InlineKeyboardButton("🔙 Հետ", callback_data="role_menu")
         ]]),
         parse_mode='Markdown'
     )

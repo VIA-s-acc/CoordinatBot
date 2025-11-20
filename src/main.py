@@ -25,14 +25,23 @@ from src.bot.handlers.role_management_handlers import (
     start_remove_user, confirm_remove_user, cancel_role_operation,
     INPUT_USER_ID, INPUT_DISPLAY_NAME, SELECT_ROLE
 )
+from src.bot.handlers.payment_management_handlers import (
+    payments_main_menu, payments_secondary_list, payments_clients_list,
+    user_payments_list, payment_detail,
+    start_edit_payment_amount, receive_new_amount,
+    start_edit_payment_comment, receive_new_comment,
+    confirm_delete_payment, execute_delete_payment, cancel_edit as cancel_payment_edit,
+    get_summary_report,
+    EDIT_AMOUNT, EDIT_COMMENT
+)
 from src.bot.handlers.basic_commands import (
     start, menu_command, text_menu_handler, help_command, message_handler
 )
 from src.bot.handlers.admin_handlers import (
-    set_log_command, set_report_command, allow_user_command, 
+    set_log_command, set_report_command, allow_user_command,
     disallow_user_command, allowed_users_command, set_user_name_command,
     export_command, sync_sheets_command, initialize_sheets_command, set_sheet_command,
-    send_data_files_command
+    send_data_files_command, add_backup_chat_command, scheduled_backup_job
 )
 from src.bot.handlers.admin_commands import clean_duplicates_command
 from src.bot.handlers.search_commands import (
@@ -92,9 +101,8 @@ def main():
 
                     logger.info(
                         f"✅ Синхронизация платежей завершена. "
-                        f"Добавлено: {stats['added']}, "
-                        f"Пропущено: {stats['skipped']}, "
-                        f"Ошибок: {stats['errors']}"
+                        f"Всего добавлено: {stats['total_added']}, "
+                        f"Ошибок: {stats['total_errors']}"
                     )
                 else:
                     logger.warning("⚠️ Не удалось инициализировать таблицу платежей")
@@ -126,12 +134,36 @@ def main():
             persistent=False
         )
 
+        # ConversationHandler для редактирования суммы платежа
+        edit_payment_amount_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(start_edit_payment_amount, pattern="^payment_edit_amount_")],
+            states={
+                EDIT_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_amount)]
+            },
+            fallbacks=[CommandHandler("cancel", cancel_payment_edit)],
+            name="edit_payment_amount_conversation",
+            persistent=False
+        )
+
+        # ConversationHandler для редактирования комментария платежа
+        edit_payment_comment_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(start_edit_payment_comment, pattern="^payment_edit_comment_")],
+            states={
+                EDIT_COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_comment)]
+            },
+            fallbacks=[CommandHandler("cancel", cancel_payment_edit)],
+            name="edit_payment_comment_conversation",
+            persistent=False
+        )
+
         # Регистрация ConversationHandler'ов (должны быть первыми)
         application.add_handler(add_record_conv)
         application.add_handler(edit_record_conv)
         application.add_handler(payment_conv)
         application.add_handler(report_conv)
         application.add_handler(add_user_conv)
+        application.add_handler(edit_payment_amount_conv)
+        application.add_handler(edit_payment_comment_conv)
         
         # Регистрация обработчиков команд
         application.add_handler(CommandHandler("start", start))
@@ -157,7 +189,23 @@ def main():
         application.add_handler(CommandHandler("sync_sheets", sync_sheets_command))
         application.add_handler(CommandHandler("initialize_sheets", initialize_sheets_command))
         application.add_handler(CommandHandler("send_data_files", send_data_files_command))
-        
+        application.add_handler(CommandHandler("add_backup_chat", add_backup_chat_command))
+
+        # Настройка автоматического бэкапа
+        from src.config.settings import BACKUP_CHAT_ID, BACKUP_INTERVAL_HOURS
+        if BACKUP_CHAT_ID:
+            print(BACKUP_CHAT_ID, BACKUP_INTERVAL_HOURS)
+            logger.info(f"Настройка автоматического бэкапа: чат {BACKUP_CHAT_ID}, интервал {BACKUP_INTERVAL_HOURS}ч")
+            job_queue = application.job_queue
+            job_queue.run_repeating(
+                scheduled_backup_job,
+                interval=BACKUP_INTERVAL_HOURS * 3600,  # конвертируем часы в секунды
+                first=10,  # первый бэкап через 10 секунд после запуска
+                name="automated_backup"
+            )
+        else:
+            logger.info("BACKUP_CHAT_ID не установлен, автоматический бэкап отключен")
+
         # Отдельные обработчики для специфичных callback'ов (должны быть ДО общего button_handler)
         from src.bot.handlers.edit_handlers import confirm_delete, cancel_edit
         logger.info("Регистрируем handlers для confirm_delete_ и cancel_edit_")
@@ -181,11 +229,24 @@ def main():
         application.add_handler(CallbackQueryHandler(start_remove_user, pattern="^role_remove_user$"))
         application.add_handler(CallbackQueryHandler(confirm_remove_user, pattern="^removeuser_confirm_"))
 
+        # Регистрация обработчиков управления платежами
+        application.add_handler(CallbackQueryHandler(payments_main_menu, pattern="^pay_menu$"))
+        application.add_handler(CallbackQueryHandler(payments_main_menu, pattern="^payments_workers_page_"))
+        application.add_handler(CallbackQueryHandler(payments_secondary_list, pattern="^payments_secondary"))
+        application.add_handler(CallbackQueryHandler(payments_clients_list, pattern="^payments_clients"))
+        application.add_handler(CallbackQueryHandler(user_payments_list, pattern="^worker_payments_"))
+        application.add_handler(CallbackQueryHandler(user_payments_list, pattern="^secondary_payments_"))
+        application.add_handler(CallbackQueryHandler(user_payments_list, pattern="^client_payments_"))
+        application.add_handler(CallbackQueryHandler(payment_detail, pattern="^payment_detail_"))
+        application.add_handler(CallbackQueryHandler(confirm_delete_payment, pattern="^payment_delete_confirm_"))
+        application.add_handler(CallbackQueryHandler(execute_delete_payment, pattern="^payment_delete_execute_"))
+        application.add_handler(CallbackQueryHandler(get_summary_report, pattern="^get_summary_report_"))
+
         # Регистрация обработчика кнопок (должен быть после ConversationHandler'ов)
         # Исключаем callback'и, которые должны обрабатываться ConversationHandler'ами
         application.add_handler(CallbackQueryHandler(
             button_handler,
-            pattern=r"^(?!add_record_sheet_|add_skip_sheet_|add_record_select_sheet$|use_my_name$|use_firm_name$|manual_input$|edit_record_|confirm_delete_|cancel_edit_|add_payment_|confirm_payment_|role_|changerole_|newrole_|removeuser_|setrole_).*"
+            pattern=r"^(?!add_record_sheet_|add_skip_sheet_|add_record_select_sheet$|use_my_name$|use_firm_name$|manual_input$|edit_record_|confirm_delete_|cancel_edit_|add_payment_|confirm_payment_|payment_edit_|payment_delete_|role_|changerole_|newrole_|removeuser_|setrole_).*"
         ))
         
         # Регистрация обработчиков сообщений

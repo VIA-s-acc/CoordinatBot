@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venvScriptspython.exe -m src.main)",
+      "Bash(.venvScriptspython.exe -m py_compile src/google_integration/async_sheets_worker.py src/google_integration/payments_sheets_manager.py src/database/database_manager.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile:*)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/main.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/database/database_manager.py src/bot/handlers/payment_management_handlers.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/bot/handlers/button_handlers.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/bot/handlers/payment_handlers.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/bot/handlers/payment_management_handlers.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/bot/handlers/payment_management_handlers.py src/main.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/bot/handlers/payment_management_handlers.py src/bot/handlers/button_handlers.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/config/settings.py src/bot/handlers/admin_handlers.py src/main.py)",
+      "Bash(\".venv/Scripts/python.exe\" -m py_compile src/bot/handlers/payment_handlers.py src/bot/handlers/conversation_handlers.py src/bot/states/conversation_states.py)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

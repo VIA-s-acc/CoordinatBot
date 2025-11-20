@@ -135,7 +135,7 @@ class PaymentsSyncManager:
 
     def sync_payments_from_db_to_sheets(self) -> Dict[str, int]:
         """
-        Синхронизирует платежи из БД в Google Sheets
+        Синхронизирует платежи из БД в Google Sheets (с пакетными вставками)
         Загружает платежи, которые есть в БД, но нет в Sheets
 
         Returns:
@@ -156,7 +156,15 @@ class PaymentsSyncManager:
 
             logger.info(f"В Google Sheets найдено {len(sheets_payment_ids)} платежей")
 
-            # Синхронизируем платежи
+            # Группируем новые платежи по ролям для пакетной вставки
+            from ..config.settings import UserRole
+            payments_by_role = {
+                UserRole.ADMIN: [],
+                UserRole.WORKER: [],
+                UserRole.SECONDARY: [],
+                UserRole.CLIENT: []
+            }
+
             for db_payment in db_payments:
                 payment_id = db_payment.get('id')
 
@@ -172,28 +180,35 @@ class PaymentsSyncManager:
 
                 # Определяем роль получателя платежа
                 # TODO: улучшить определение роли по user_display_name
-                from ..config.settings import UserRole
                 role = UserRole.WORKER  # По умолчанию
 
-                # Добавляем платеж в Google Sheets
-                # Вместо синхронного добавления в Sheets ставим задачу в async-воркер
-                try:
-                    from .async_sheets_worker import add_payment_async
-                    add_payment_async(
-                        payment_id=payment_id,
-                        user_display_name=db_payment['user_display_name'],
-                        amount=db_payment['amount'],
-                        role=role,
-                        date_from=db_payment.get('date_from'),
-                        date_to=db_payment.get('date_to'),
-                        comment=db_payment.get('comment'),
-                        target_spreadsheet_id=db_payment.get('spreadsheet_id'),
-                        target_sheet_name=db_payment.get('sheet_name')
-                    )
-                    stats['added'] += 1
-                except Exception as e:
-                    logger.error(f"❌ Ошибка при постановке задачи add_payment_async для #{payment_id}: {e}", exc_info=True)
-                    stats['errors'] += 1
+                # Добавляем платеж в группу для пакетной вставки
+                payments_by_role[role].append({
+                    'payment_id': payment_id,
+                    'user_display_name': db_payment['user_display_name'],
+                    'amount': db_payment['amount'],
+                    'date_from': db_payment.get('date_from'),
+                    'date_to': db_payment.get('date_to'),
+                    'comment': db_payment.get('comment'),
+                    'target_spreadsheet_id': db_payment.get('spreadsheet_id'),
+                    'target_sheet_name': db_payment.get('sheet_name')
+                })
+
+            # Выполняем пакетные вставки для каждой роли
+            for role, payments in payments_by_role.items():
+                if payments:
+                    try:
+                        logger.info(f"Пакетная вставка {len(payments)} платежей для роли {role}")
+                        success = self.payments_sheets.add_payments_batch(payments, role)
+                        if success:
+                            stats['added'] += len(payments)
+                            logger.info(f"✅ Пакетно добавлено {len(payments)} платежей для роли {role}")
+                        else:
+                            stats['errors'] += len(payments)
+                            logger.error(f"❌ Ошибка пакетной вставки для роли {role}")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка при пакетной вставке для роли {role}: {e}", exc_info=True)
+                        stats['errors'] += len(payments)
 
             logger.info(
                 f"✅ Синхронизация БД → Sheets завершена. "

@@ -304,48 +304,48 @@ async def sort_sheet_by_date_handler(update: Update, context: CallbackContext):
         
         # Выполняем сортировку
         success = sort_sheet_by_date(spreadsheet_id, sheet_name)
-        
-            if success:
-                try:
-                    repeat_text = _("buttons.update", user_id)
-                    back_text = _("menu.back", user_id)
-                except Exception:
-                    repeat_text = "🔄 Повторить сортировку"
-                    back_text = "⬅️ Назад"
 
-                await query.edit_message_text(
-                    f"✅ <b>Сортировка завершена успешно!</b>\n\n"
-                    f"📊 Աղյուսակ: <b>{spreadsheet_id}</b>\n"
-                    f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
-                    f"🎯 Все записи отсортированы по дате\n"
-                    f"📅 Более старые записи находятся вверху",
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(repeat_text, callback_data="sort_sheet_by_date")],
-                        [InlineKeyboardButton(back_text, callback_data="settings_menu")]
-                    ])
-                )
+        if success:
+            try:
+                repeat_text = _("buttons.update", user_id)
+                back_text = _("menu.back", user_id)
+            except Exception:
+                repeat_text = "🔄 Повторить сортировку"
+                back_text = "⬅️ Назад"
+
+            await query.edit_message_text(
+                f"✅ <b>Сортировка завершена успешно!</b>\n\n"
+                f"📊 Աղյուսակ: <b>{spreadsheet_id}</b>\n"
+                f"📋 Թերթիկ: <b>{sheet_name}</b>\n\n"
+                f"🎯 Все записи отсортированы по дате\n"
+                f"📅 Более старые записи находятся вверху",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(repeat_text, callback_data="sort_sheet_by_date")],
+                    [InlineKeyboardButton(back_text, callback_data="settings_menu")]
+                ])
+            )
         else:
-                try:
-                    repeat_text = _("buttons.update", user_id)
-                    back_text = _("menu.back", user_id)
-                except Exception:
-                    repeat_text = "🔄 Повторить"
-                    back_text = "⬅️ Назад"
+            try:
+                repeat_text = _("buttons.update", user_id)
+                back_text = _("menu.back", user_id)
+            except Exception:
+                repeat_text = "🔄 Повторить"
+                back_text = "⬅️ Назад"
 
-                await query.edit_message_text(
-                    f"❌ <b>Ошибка сортировки</b>\n\n"
-                    f"Не удалось отсортировать лист. Возможные причины:\n"
-                    f"• Нет доступа к листу\n"
-                    f"• Лист не найден\n"
-                    f"• Проблемы с подключением\n\n"
-                    f"Попробуйте позже.",
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(repeat_text, callback_data="sort_sheet_by_date")],
-                        [InlineKeyboardButton(back_text, callback_data="settings_menu")]
-                    ])
-                )
+            await query.edit_message_text(
+                f"❌ <b>Ошибка сортировки</b>\n\n"
+                f"Не удалось отсортировать лист. Возможные причины:\n"
+                f"• Нет доступа к листу\n"
+                f"• Лист не найден\n"
+                f"• Проблемы с подключением\n\n"
+                f"Попробуйте позже.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(repeat_text, callback_data="sort_sheet_by_date")],
+                    [InlineKeyboardButton(back_text, callback_data="settings_menu")]
+                ])
+            )
         
     except Exception as e:
         logger.error(f"Ошибка сортировки листа: {e}")

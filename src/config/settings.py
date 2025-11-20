@@ -50,6 +50,19 @@ GOOGLE_SHEET_WORKERS = 2  # Количество воркеров для раб�
 # ID таблицы для хранения платежей (отдельная от основной)
 PAYMENTS_SPREADSHEET_ID = os.getenv('PAYMENTS_SPREADSHEET_ID')
 
+# ID чата для автоматических бэкапов
+BACKUP_CHAT_ID = os.getenv('BACKUP_CHAT_ID')
+if BACKUP_CHAT_ID and BACKUP_CHAT_ID.strip():
+    try:
+        BACKUP_CHAT_ID = int(BACKUP_CHAT_ID)
+    except ValueError:
+        BACKUP_CHAT_ID = None
+else:
+    BACKUP_CHAT_ID = None
+
+# Интервал автоматического бэкапа (в часах)
+BACKUP_INTERVAL_HOURS = float(os.getenv('BACKUP_INTERVAL_HOURS', '4'))
+
 LOCALIZATION_FILE = os.path.join(BASE_DIR, 'src/config/localization.json')
 
 

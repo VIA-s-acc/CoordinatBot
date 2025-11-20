@@ -271,6 +271,13 @@ async def send_to_log_chat(context: CallbackContext, message: str):
     log_chat_id = get_log_chat_id()
     if log_chat_id:
         try:
-            await context.bot.send_message(chat_id=log_chat_id, text=message)
+            await context.bot.send_message(
+                chat_id=log_chat_id,
+                text=message,
+                parse_mode='HTML'
+            )
+            logger.info(f"Сообщение успешно отправлено в лог-чат {log_chat_id}")
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения в лог-чат: {e}")
+    else:
+        logger.warning("log_chat_id не установлен в bot_config.json. Используйте команду для настройки лог-чата.")

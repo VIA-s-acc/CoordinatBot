@@ -363,23 +363,34 @@ class DatabaseManager:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            if user_display_name and spreadsheet_id and sheet_name:
-                # Получаем платежи конкретного пользователя
-                cursor.execute('''
-                    SELECT id, user_display_name, spreadsheet_id, sheet_name,
-                           amount, date_from, date_to, comment, created_at
-                    FROM payments
-                    WHERE user_display_name = ? AND spreadsheet_id = ? AND sheet_name = ?
-                    ORDER BY created_at DESC
-                ''', (user_display_name, spreadsheet_id, sheet_name))
-            else:
-                # Получаем все платежи
-                cursor.execute('''
-                    SELECT id, user_display_name, spreadsheet_id, sheet_name,
-                           amount, date_from, date_to, comment, created_at
-                    FROM payments
-                    ORDER BY created_at DESC
-                ''')
+            # Формируем WHERE условия динамически
+            conditions = []
+            params = []
+
+            if user_display_name:
+                conditions.append("user_display_name = ?")
+                params.append(user_display_name)
+
+            if spreadsheet_id:
+                conditions.append("spreadsheet_id = ?")
+                params.append(spreadsheet_id)
+
+            if sheet_name:
+                conditions.append("sheet_name = ?")
+                params.append(sheet_name)
+
+            query = '''
+                SELECT id, user_display_name, spreadsheet_id, sheet_name,
+                       amount, date_from, date_to, comment, created_at
+                FROM payments
+            '''
+
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+
+            query += " ORDER BY created_at DESC"
+
+            cursor.execute(query, params)
 
             rows = cursor.fetchall()
             result = [dict(row) for row in rows]
@@ -389,6 +400,99 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Ошибка получения платежей: {e}")
             return []
+
+    def delete_payment(self, payment_id: int) -> bool:
+        """
+        Удаляет платеж из БД
+
+        Args:
+            payment_id: ID платежа для удаления
+
+        Returns:
+            True если успешно, False если ошибка
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute('DELETE FROM payments WHERE id = ?', (payment_id,))
+            deleted = cursor.rowcount > 0
+
+            conn.commit()
+            conn.close()
+
+            if deleted:
+                logger.info(f"Платеж #{payment_id} удален из БД")
+            else:
+                logger.warning(f"Платеж #{payment_id} не найден в БД")
+
+            return deleted
+
+        except Exception as e:
+            logger.error(f"Ошибка удаления платежа #{payment_id}: {e}")
+            return False
+
+    def update_payment(self, payment_id: int, amount: float = None,
+                      date_from: str = None, date_to: str = None,
+                      comment: str = None) -> bool:
+        """
+        Обновляет платеж в БД
+
+        Args:
+            payment_id: ID платежа для обновления
+            amount: Новая сумма (опционально)
+            date_from: Новая дата начала (опционально)
+            date_to: Новая дата окончания (опционально)
+            comment: Новый комментарий (опционально)
+
+        Returns:
+            True если успешно, False если ошибка
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Формируем запрос только для изменяемых полей
+            updates = []
+            params = []
+
+            if amount is not None:
+                updates.append("amount = ?")
+                params.append(amount)
+            if date_from is not None:
+                updates.append("date_from = ?")
+                params.append(date_from)
+            if date_to is not None:
+                updates.append("date_to = ?")
+                params.append(date_to)
+            if comment is not None:
+                updates.append("comment = ?")
+                params.append(comment)
+
+            if not updates:
+                logger.warning(f"Нечего обновлять для платежа #{payment_id}")
+                conn.close()
+                return False
+
+            params.append(payment_id)
+            query = f"UPDATE payments SET {', '.join(updates)} WHERE id = ?"
+
+            cursor.execute(query, params)
+            updated = cursor.rowcount > 0
+
+            conn.commit()
+            conn.close()
+
+            if updated:
+                logger.info(f"Платеж #{payment_id} обновлен в БД")
+            else:
+                logger.warning(f"Платеж #{payment_id} не найден в БД")
+
+            return updated
+
+        except Exception as e:
+            logger.error(f"Ошибка обновления платежа #{payment_id}: {e}")
+            return False
 
     def get_records_by_period(self, start_date: str, end_date: str) -> List[Dict]:
         """Получает записи за указанный период"""
@@ -517,20 +621,15 @@ def add_payment(user_display_name: str, spreadsheet_id: str = None,
     )
 
     if payment_id > 0:
-        # Синхронизируем с Google Sheets
+        # Синхронизируем с Google Sheets через async worker
         try:
-            from ..google_integration.payments_sync_manager import PaymentsSyncManager
-            from ..utils.config_utils import get_user_role
+            from ..google_integration.async_sheets_worker import add_payment_async
 
             # Определяем роль пользователя по display_name
-            # TODO: улучшить определение роли
-            role = get_user_role(0)  # Временное решение
-            if not role:
-                from ..config.settings import UserRole
-                role = UserRole.WORKER  # По умолчанию
+            role = get_role_by_display_name(user_display_name)
 
-            sync_manager = PaymentsSyncManager()
-            sync_manager.sync_payment_to_sheets(
+            # Добавляем задачу в очередь async worker
+            add_payment_async(
                 payment_id=payment_id,
                 user_display_name=user_display_name,
                 amount=amount,
@@ -541,8 +640,9 @@ def add_payment(user_display_name: str, spreadsheet_id: str = None,
                 target_spreadsheet_id=spreadsheet_id,
                 target_sheet_name=sheet_name
             )
+            logger.info(f"Платеж #{payment_id} добавлен в очередь для синхронизации с Google Sheets (роль: {role})")
         except Exception as e:
-            logger.error(f"Ошибка синхронизации платежа #{payment_id} с Google Sheets: {e}")
+            logger.error(f"Ошибка постановки задачи синхронизации платежа #{payment_id}: {e}")
 
     return payment_id
 
@@ -550,6 +650,116 @@ def get_payments(user_display_name: str = None, spreadsheet_id: str = None,
                 sheet_name: str = None) -> List[Dict]:
     """Получает платежи пользователя или все платежи"""
     return db_manager.get_payments(user_display_name, spreadsheet_id, sheet_name)
+
+def get_role_by_display_name(display_name: str) -> str:
+    """
+    Определяет роль пользователя по display_name
+
+    Args:
+        display_name: Отображаемое имя пользователя
+
+    Returns:
+        Роль пользователя или UserRole.WORKER по умолчанию
+    """
+    from ..utils.config_utils import load_users
+    from ..config.settings import UserRole
+
+    users = load_users()
+    for user_id_str, user_data in users.items():
+        if user_data.get('display_name') == display_name:
+            return user_data.get('role', UserRole.WORKER)
+    return UserRole.WORKER
+
+
+def delete_payment(payment_id: int) -> bool:
+    """
+    Удаляет платеж из БД и из Google Sheets
+
+    Args:
+        payment_id: ID платежа для удаления
+
+    Returns:
+        True если успешно удален из БД
+    """
+    # Сначала получаем информацию о платеже для удаления из Sheets
+    try:
+        from ..google_integration.async_sheets_worker import delete_payment_async
+
+        # Получаем информацию о платеже перед удалением
+        all_payments = db_manager.get_payments()
+        payment = next((p for p in all_payments if p['id'] == payment_id), None)
+
+        # Определяем роль по display_name
+        role = get_role_by_display_name(payment['user_display_name']) if payment else None
+
+        # Удаляем из БД
+        success = db_manager.delete_payment(payment_id)
+
+        if success and role:
+            # Добавляем задачу на удаление из Google Sheets
+            delete_payment_async(payment_id=payment_id, role=role)
+            logger.info(f"Платеж #{payment_id} добавлен в очередь для удаления из Google Sheets (роль: {role})")
+
+        return success
+
+    except Exception as e:
+        logger.error(f"Ошибка при удалении платежа #{payment_id}: {e}")
+        return False
+
+def update_payment(payment_id: int, amount: float = None,
+                  date_from: str = None, date_to: str = None,
+                  comment: str = None) -> bool:
+    """
+    Обновляет платеж в БД и синхронизирует с Google Sheets через async worker
+
+    Args:
+        payment_id: ID платежа
+        amount: Новая сумма
+        date_from: Новая дата начала
+        date_to: Новая дата окончания
+        comment: Новый комментарий
+
+    Returns:
+        True если успешно
+    """
+    from ..google_integration.async_sheets_worker import update_payment_async
+
+    try:
+        # Получаем информацию о платеже для определения роли
+        all_payments = db_manager.get_payments()
+        payment = next((p for p in all_payments if p['id'] == payment_id), None)
+
+        if not payment:
+            logger.error(f"Платеж #{payment_id} не найден")
+            return False
+
+        # Определяем роль по display_name
+        role = get_role_by_display_name(payment['user_display_name'])
+
+        # Обновляем в БД
+        success = db_manager.update_payment(payment_id, amount, date_from, date_to, comment)
+
+        if success and role:
+            # Формируем словарь с обновленными данными
+            updated_data = {}
+            if amount is not None:
+                updated_data['amount'] = amount
+            if date_from is not None:
+                updated_data['date_from'] = date_from
+            if date_to is not None:
+                updated_data['date_to'] = date_to
+            if comment is not None:
+                updated_data['comment'] = comment
+
+            # Добавляем задачу на обновление в Google Sheets
+            update_payment_async(payment_id=payment_id, role=role, updated_data=updated_data)
+            logger.info(f"Платеж #{payment_id} обновлен и добавлен в очередь для синхронизации с Google Sheets (роль: {role})")
+
+        return success
+
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении платежа #{payment_id}: {e}")
+        return False
 
 def get_records_by_period(start_date: str, end_date: str) -> List[Dict]:
     """Получает записи за указанный период"""

@@ -606,3 +606,160 @@ async def set_report_sheet_handler(update: Update, context: CallbackContext):
             parse_mode="HTML",
             reply_markup=create_main_menu(user_id)
         )
+
+
+async def add_backup_chat_command(update: Update, context: CallbackContext):
+    """
+    Команда для назначения текущего чата для автоматических бэкапов
+    Использование: /add_backup_chat
+    """
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
+        return
+
+    chat_id = update.effective_chat.id
+
+    # Сохраняем chat_id в переменную окружения через config файл
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), '.env')
+
+    try:
+        # Читаем существующий .env файл
+        env_vars = {}
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        env_vars[key.strip()] = value.strip()
+
+        # Обновляем BACKUP_CHAT_ID
+        env_vars['BACKUP_CHAT_ID'] = str(chat_id)
+
+        # Записываем обратно
+        with open(env_path, 'w', encoding='utf-8') as f:
+            for key, value in env_vars.items():
+                f.write(f"{key}={value}\n")
+
+        # Обновляем текущую конфигурацию в памяти
+        from ...config import settings
+        settings.BACKUP_CHAT_ID = chat_id
+
+        await update.message.reply_text(
+            f"✅ <b>Բեքափ չատ սահմանված է</b>\n\n"
+            f"📋 Chat ID: <code>{chat_id}</code>\n"
+            f"🕐 Ինտերվալ: {settings.BACKUP_INTERVAL_HOURS} ժամ\n\n"
+            f"Ավտոմատ բեքափերը կուղարկվեն այս չատ:\n"
+            f"• data/ պանակի բոլոր ֆայլերը\n"
+            f"• Ամեն {settings.BACKUP_INTERVAL_HOURS} ժամը մեկ",
+            parse_mode="HTML"
+        )
+
+        await send_to_log_chat(context, f"🔧 Բեքափ չատ սահմանված է: Chat ID: {chat_id}")
+
+        # Отправляем тестовый бэкап
+        await update.message.reply_text("📤 Ուղարկում եմ թեսթային բեքափ...")
+        await send_backup_to_chat(context, chat_id, test_mode=True)
+
+    except Exception as e:
+        logger.error(f"Ошибка при установке backup chat: {e}", exc_info=True)
+        await update.message.reply_text(
+            f"❌ Սխալ բեքափ չատ սահմանելիս:\n<code>{str(e)}</code>",
+            parse_mode="HTML"
+        )
+
+
+async def send_backup_to_chat(context: CallbackContext, chat_id: int, test_mode: bool = False):
+    """
+    Отправляет файлы из папки data в указанный чат
+
+    Args:
+        context: Контекст бота
+        chat_id: ID чата для отправки
+        test_mode: Если True, добавляет пометку "Test"
+    """
+    from ...config.settings import DATA_DIR
+
+    try:
+        if not os.path.exists(DATA_DIR):
+            logger.error(f"Папка data не найдена: {DATA_DIR}")
+            return
+
+        files = [f for f in os.listdir(DATA_DIR) if os.path.isfile(os.path.join(DATA_DIR, f))]
+
+        if not files:
+            logger.warning("В папке data нет файлов для бэкапа")
+            return
+
+        # Создаем сообщение-заголовок
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        test_label = " [TEST]" if test_mode else ""
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"🔄 <b>Ավտոմատ Բեքափ{test_label}</b>\n\n"
+                f"📅 Ամսաթիվ: {timestamp}\n"
+                f"📁 Ֆայլեր: {len(files)}\n"
+                f"━━━━━━━━━━━━━━━"
+            ),
+            parse_mode="HTML"
+        )
+
+        # Отправляем файлы
+        for fname in files:
+            fpath = os.path.join(DATA_DIR, fname)
+            try:
+                await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
+                with open(fpath, 'rb') as f:
+                    await context.bot.send_document(
+                        chat_id=chat_id,
+                        document=f,
+                        filename=fname,
+                        caption=f"📄 {fname}"
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка отправки файла {fname} в бэкап чат: {e}")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"❌ Չհաջողվեց ուղարկել {fname}: {e}"
+                )
+
+        # Итоговое сообщение
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ Բեքափը ավարտված է: {len(files)} ֆայլ ուղարկված է",
+            parse_mode="HTML"
+        )
+
+        logger.info(f"Backup sent to chat {chat_id}: {len(files)} files")
+
+    except Exception as e:
+        logger.error(f"Ошибка при отправке бэкапа в чат {chat_id}: {e}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ Սխալ բեքափ ուղարկելիս: {e}"
+            )
+        except:
+            pass
+
+
+async def scheduled_backup_job(context: CallbackContext):
+    """
+    Функция для периодического автоматического бэкапа
+    Вызывается по расписанию
+    """
+    from ...config.settings import BACKUP_CHAT_ID
+
+    if not BACKUP_CHAT_ID:
+        logger.warning("BACKUP_CHAT_ID не установлен, пропускаем автоматический бэкап")
+        return
+
+    logger.info(f"Запуск автоматического бэкапа в чат {BACKUP_CHAT_ID}")
+
+    try:
+        await send_backup_to_chat(context, BACKUP_CHAT_ID, test_mode=False)
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении автоматического бэкапа: {e}", exc_info=True)

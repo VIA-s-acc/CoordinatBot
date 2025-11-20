@@ -23,6 +23,7 @@ SET_REPORT_SHEET = 10
 PAYMENT_AMOUNT = 11
 PAYMENT_PERIOD = 12
 PAYMENT_COMMENT = 13
+PAYMENT_SHEET_SELECTION = 19  # Выбор таблицы для SECONDARY пользователей
 
 # Состояния для настроек
 SET_USER_LIMIT = 14

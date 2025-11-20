@@ -4,17 +4,18 @@ ConversationHandler'ы для диалогов с пользователем
 import logging
 from telegram.ext import ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from .payment_handlers import (
-    start_add_payment, get_payment_amount, get_payment_period, 
-    get_payment_comment, cancel_payment
+    start_add_payment, get_payment_amount, get_payment_period,
+    get_payment_comment, cancel_payment, select_payment_sheet
 )
 from .translation_handlers import (
     start_add_translation, get_translation_key, get_translation_language,
     save_translation, cancel_translation
 )
 from ..states.conversation_states import (
-    DATE, SUPPLIER_CHOICE, SUPPLIER_MANUAL, DIRECTION, DESCRIPTION, AMOUNT, 
+    DATE, SUPPLIER_CHOICE, SUPPLIER_MANUAL, DIRECTION, DESCRIPTION, AMOUNT,
     EDIT_VALUE, SET_REPORT_SHEET, PAYMENT_AMOUNT, PAYMENT_PERIOD, PAYMENT_COMMENT,
-    ADD_TRANSLATION_KEY, ADD_TRANSLATION_LANG, ADD_TRANSLATION_TEXT, SHEET_SELECTION
+    ADD_TRANSLATION_KEY, ADD_TRANSLATION_LANG, ADD_TRANSLATION_TEXT, SHEET_SELECTION,
+    PAYMENT_SHEET_SELECTION
 )
 from .record_handlers import (
     start_add_record, start_add_skip_record, get_date, get_supplier_manual, 
@@ -109,6 +110,10 @@ def create_payment_conversation():
             CallbackQueryHandler(start_add_payment, pattern="^add_payment_"),
         ],
         states={
+            PAYMENT_SHEET_SELECTION: [
+                CallbackQueryHandler(select_payment_sheet, pattern="^select_pay_sheet_"),
+                CallbackQueryHandler(start_add_payment, pattern="^add_payment_"),  # Повторный вход
+            ],
             PAYMENT_AMOUNT: [
                 MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, get_payment_amount),
                 CallbackQueryHandler(start_add_payment, pattern="^add_payment_"),  # Повторный вход
