@@ -2,14 +2,13 @@
 Менеджер для работы с Google Sheets таблицами платежей
 Создает и управляет отдельными листами для каждой роли
 """
-import logging
+
 from datetime import datetime
 from typing import Optional, List, Dict
 from .sheets_manager import GoogleSheetsManager
-from ..config.settings import PAYMENTS_SPREADSHEET_ID, UserRole
+from ..config.settings import PAYMENTS_SPREADSHEET_ID, UserRole, logger
 from ..utils.config_utils import get_role_display_name
 
-logger = logging.getLogger(__name__)
 
 
 class PaymentsSheetsManager:

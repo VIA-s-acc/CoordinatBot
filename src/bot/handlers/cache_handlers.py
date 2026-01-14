@@ -1,16 +1,15 @@
 """
 Обработчики для управления кешем листов
 """
-import logging
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 
 from ...utils.sheets_cache import get_cache_statistics, clear_all_cache, invalidate_spreadsheets_cache
 from ...utils.localization import _
 from ..keyboards.inline_keyboards import create_back_to_menu_keyboard
-from ...config.settings import ADMIN_IDS
+from ...config.settings import ADMIN_IDS, logger
 
-logger = logging.getLogger(__name__)
 
 async def cache_management_menu(update: Update, context: CallbackContext):
     """Показывает меню управления кешем"""

@@ -3,12 +3,12 @@
 """
 import json
 import os
-import logging
+
 from datetime import datetime
 from telegram import Update
 from telegram.ext import CallbackContext
 
-from ...config.settings import ADMIN_IDS
+from ...config.settings import ADMIN_IDS, logger
 from telegram.constants import ChatAction
 from ...utils.date_utils import safe_parse_date_or_none
 from ...utils.config_utils import (
@@ -22,7 +22,6 @@ from ...google_integration.sync_manager import full_sync
 from ..keyboards.inline_keyboards import create_main_menu
 from .edit_handlers import get_user_id_by_name
 
-logger = logging.getLogger(__name__)
 
 async def send_data_files_command(update: Update, context: CallbackContext):
     """Команда для отправки всех файлов из папки data администратору"""
@@ -371,9 +370,7 @@ async def sync_sheets_command(update: Update, context: CallbackContext):
 
 def initialize_and_sync_sheets():
     import uuid
-    import logging
 
-    logger = logging.getLogger(__name__)
     headers = ['ID', 'ամսաթիվ', 'մատակարար', 'ուղղություն', 'ծախսի բնութագիր', 'Արժեք']
     spreadsheets = get_all_spreadsheets()
 
@@ -681,14 +678,19 @@ async def send_backup_to_chat(context: CallbackContext, chat_id: int, test_mode:
         chat_id: ID чата для отправки
         test_mode: Если True, добавляет пометку "Test"
     """
-    from ...config.settings import DATA_DIR
+    # Определяем путь к данным в зависимости от режима
+    if os.environ.get('DEPLOY_MODE') == 'true':
+        data_dir = '/data'
+    else:
+        from ...config.settings import DATA_DIR
+        data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data'))
 
     try:
-        if not os.path.exists(DATA_DIR):
-            logger.error(f"Папка data не найдена: {DATA_DIR}")
+        if not os.path.exists(data_dir):
+            logger.error(f"Папка data не найдена: {data_dir}")
             return
 
-        files = [f for f in os.listdir(DATA_DIR) if os.path.isfile(os.path.join(DATA_DIR, f))]
+        files = [f for f in os.listdir(data_dir) if os.path.isfile(os.path.join(data_dir, f))]
 
         if not files:
             logger.warning("В папке data нет файлов для бэкапа")
@@ -711,7 +713,7 @@ async def send_backup_to_chat(context: CallbackContext, chat_id: int, test_mode:
 
         # Отправляем файлы
         for fname in files:
-            fpath = os.path.join(DATA_DIR, fname)
+            fpath = os.path.join(data_dir, fname)
             try:
                 await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
                 with open(fpath, 'rb') as f:

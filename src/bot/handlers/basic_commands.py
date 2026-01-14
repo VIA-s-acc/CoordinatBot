@@ -1,7 +1,6 @@
 """
 Основные команды бота
 """
-import logging
 import sys
 import os
 
@@ -12,10 +11,9 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import CallbackContext
 from src.bot.keyboards.inline_keyboards import create_main_menu, create_back_to_menu_keyboard
 from src.utils.config_utils import is_user_allowed, get_user_settings, load_users, save_users
-from src.config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID
+from src.config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID, logger
 from src.database.database_manager import init_db
 
-logger = logging.getLogger(__name__)
 
 def create_reply_menu():
     """Создает основное Reply-меню"""

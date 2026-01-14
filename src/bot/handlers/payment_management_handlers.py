@@ -2,18 +2,17 @@
 Обработчики для управления платежами (просмотр, редактирование, удаление)
 Полностью переработанная версия с листаемыми списками
 """
-import logging
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from ...config.settings import UserRole
+from ...config.settings import UserRole, logger
 from ...utils.config_utils import (
     is_admin, is_super_admin, get_user_role, get_users_by_role,
     get_user_display_name, load_users
 )
 from ...database.database_manager import get_payments, delete_payment, update_payment, get_role_by_display_name
 
-logger = logging.getLogger(__name__)
 
 # Conversation states
 EDIT_AMOUNT, EDIT_DATE_FROM, EDIT_DATE_TO, EDIT_COMMENT = range(4)

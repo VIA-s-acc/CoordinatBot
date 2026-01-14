@@ -2,7 +2,7 @@
 Асинхронный воркер для работы с Google Sheets
 """
 import asyncio
-import logging
+
 from queue import Queue
 from threading import Thread, current_thread
 from typing import Dict, Any, Optional
@@ -11,8 +11,7 @@ from enum import Enum
 import time
 
 from .sheets_manager import sheets_manager
-
-logger = logging.getLogger(__name__)
+from ..config.settings import logger
 
 
 class TaskType(Enum):

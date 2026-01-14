@@ -1,13 +1,13 @@
 """
 Обработчики платежей
 """
-import logging
+
 import pandas as pd
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler
 
-from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID
+from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID, logger
 import os
 from ...utils.config_utils import load_users, get_user_settings, send_to_log_chat
 from ...database.database_manager import add_payment, get_payments, get_all_records
@@ -18,7 +18,6 @@ from ...utils.date_utils import safe_parse_date_or_none
 from ..keyboards.inline_keyboards import create_main_menu
 from ..handlers.translation_handlers import _
 
-logger = logging.getLogger(__name__)
 
 # --- Новая команда администратора для отправки файлов из папки data ---
 from telegram.constants import ChatAction
@@ -689,7 +688,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
             back_button = InlineKeyboardButton(_("menu.back", user_id), callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
             keyboard = [[back_button]]
             await update.callback_query.edit_message_text(
-                f"{_('messages.payment_saved', user_id)} {display_name}-ի համար",
+                f"{_('messages.report_send', user_id)} {display_name}-ի համար",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
@@ -772,8 +771,6 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
                 caption=(
                     f"📋 Թերթ: {sheet_name}\n"
                     f"💰 Ընդհանուր ծախս: {df_amount_total:,.2f} դրամ\n"
-                    f"💵 Ընդհանուր վճար: {total_paid_sheet:,.2f} դրամ\n"
-                    f"💸 Մնացորդ: {total_left_sheet:,.2f} դրամ"
                 )
             )
 
@@ -833,7 +830,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
         back_button = InlineKeyboardButton(_("menu.back", user_id), callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
         keyboard = [[back_button]]
         await update.callback_query.edit_message_text(
-            f"{_('messages.payment_saved', user_id)} {display_name}-ի համար",
+            f"{_('messages.report_send', user_id)} {display_name}-ի համար",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         

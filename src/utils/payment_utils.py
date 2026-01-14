@@ -5,6 +5,7 @@ import re
 import pandas as pd
 from datetime import datetime
 from typing import Optional
+from ..config.settings import logger
 
 def normalize_date(date_str: str) -> str:
     """
@@ -132,8 +133,6 @@ async def get_user_id_by_display_name(display_name: str) -> Optional[int]:
 
 async def send_message_to_user(context, user_id: int, text: str, reply_markup=None):
     """Отправляет сообщение пользователю по ID"""
-    import logging
-    logger = logging.getLogger(__name__)
     
     try:
         await context.bot.send_message(

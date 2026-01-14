@@ -1,14 +1,13 @@
 """
 Обработчик ошибок
 """
-import logging
+
 import traceback
 from telegram import Update
 from telegram.ext import CallbackContext
 
 from ...utils.config_utils import send_to_log_chat
-
-logger = logging.getLogger(__name__)
+from ...config.settings import logger
 
 async def error_handler(update: object, context: CallbackContext) -> None:
     """Обрабатывает ошибки"""

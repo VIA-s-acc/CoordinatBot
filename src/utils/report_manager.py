@@ -2,7 +2,7 @@
 Система отчетов и аналитики
 """
 import pandas as pd
-import logging
+
 from io import BytesIO
 from datetime import datetime, timedelta
 from .date_utils import safe_parse_date_or_none
@@ -12,8 +12,8 @@ from telegram.ext import CallbackContext
 from ..database.database_manager import get_all_records, get_payments
 from ..utils.date_utils import normalize_date
 from .config_utils import load_bot_config
+from ..config.settings import logger
 
-logger = logging.getLogger(__name__)
 
 async def send_report(context: CallbackContext, action: str, record: dict, user: dict):
     """Отправляет отчет о действии в настроенные чаты"""

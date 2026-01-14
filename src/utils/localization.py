@@ -3,10 +3,9 @@
 """
 import json
 import os
-import logging
-from typing import Dict, Any
 
-logger = logging.getLogger(__name__)
+from typing import Dict, Any
+from ..config.settings import logger
 
 class LocalizationManager:
     """Менеджер локализации"""

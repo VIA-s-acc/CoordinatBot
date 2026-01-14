@@ -23,5 +23,6 @@ primary_region = 'fra'
 
 # Конфигурация volume для постоянного хранения данных
 [[mounts]]
-  source = 'coordinatbot_data'
-  destination = '/data'
+  source = "coordinatbot_data"
+  destination = "/app_data"
+

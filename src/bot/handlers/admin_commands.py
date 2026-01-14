@@ -1,13 +1,13 @@
 """
 Обработчики команд администратора
 """
-import logging
+
 import json
 import os
 from datetime import datetime
 from telegram import Update
 from telegram.ext import CallbackContext
-from ...config.settings import ADMIN_IDS
+from ...config.settings import ADMIN_IDS, logger
 from ...utils.config_utils import (
     add_allowed_user, remove_allowed_user, 
     load_allowed_users, update_user_settings,
@@ -21,7 +21,6 @@ from ...utils.config_utils import (
 )
 from ...database.database_manager import backup_db_to_dict
 
-logger = logging.getLogger(__name__)
 
 async def set_log_command(update: Update, context: CallbackContext):
     """Устанавливает текущий чат как лог-чат"""

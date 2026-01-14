@@ -9,11 +9,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.google_integration.payments_sheets_manager import PaymentsSheetsManager
-from src.config.settings import UserRole
-import logging
+from src.config.settings import UserRole, logger
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+
 
 
 def cleanup_payments_sheets():

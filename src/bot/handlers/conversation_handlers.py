@@ -1,7 +1,7 @@
 """
 ConversationHandler'ы для диалогов с пользователем
 """
-import logging
+
 from telegram.ext import ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from .payment_handlers import (
     start_add_payment, get_payment_amount, get_payment_period,
@@ -27,8 +27,8 @@ from .edit_handlers import (
 from .basic_commands import text_menu_handler
 from .button_handlers import button_handler, conversation_fallback_handler
 from .admin_handlers import set_report_sheet_handler
+from ...config.settings import logger
 
-logger = logging.getLogger(__name__)
 
 def create_add_record_conversation():
     """Создает ConversationHandler для добавления записей"""

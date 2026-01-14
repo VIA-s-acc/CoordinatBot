@@ -14,11 +14,8 @@ import sqlite3
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.google_integration.sheets_manager import GoogleSheetsManager
-from src.config.settings import ACTIVE_SPREADSHEET_ID, DATABASE_PATH
-import logging
+from src.config.settings import ACTIVE_SPREADSHEET_ID, DATABASE_PATH, logger
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 
 def is_numeric_id(value):

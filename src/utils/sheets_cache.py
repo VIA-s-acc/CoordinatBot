@@ -1,13 +1,13 @@
 """
 Кеширование данных о листах Google Sheets для быстрого доступа
 """
-import logging
+
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from ..config.settings import logger
 
-logger = logging.getLogger(__name__)
 
 class SheetsCache:
     """Класс для кеширования данных о листах"""

@@ -3,7 +3,7 @@
 """
 import os
 import json
-import logging
+
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler
@@ -18,7 +18,7 @@ from ...utils.config_utils import is_user_allowed, get_user_settings, update_use
 from ...utils.localization import _
 from ...database.database_manager import get_db_stats
 from ...utils.sheets_cache import get_cached_sheets_info, get_cached_spreadsheets
-from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID
+from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID, logger
 
 from .payment_handlers import pay_menu_handler, pay_user_handler, send_payment_report
 from .settings_handlers import (
@@ -26,7 +26,6 @@ from .settings_handlers import (
     toggle_notifications, system_info
 )
 
-logger = logging.getLogger(__name__)
 
 def safe_parse_date(date_str: str, default_date: str = '2000-01-01') -> datetime:
     """Безопасный парсинг даты с обработкой пустых значений"""
@@ -224,7 +223,8 @@ async def button_handler(update: Update, context: CallbackContext):
     # Генерация отчетов
     elif data.startswith("generate_report_"):
         display_name = data.replace("generate_report_", "")
-        await generate_user_report(update, context, display_name)
+        from ...utils.report_manager import generate_user_report
+        await generate_user_report(display_name, update, context)
     
     # Платежи
     elif data == "pay_menu" and user_id in ADMIN_IDS:

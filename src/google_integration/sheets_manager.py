@@ -3,16 +3,15 @@
 """
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import logging
+
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import datetime
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
-from ..config.settings import GOOGLE_CREDS_FILE, GOOGLE_SCOPE, GOOGLE_SCOPES
+from ..config.settings import GOOGLE_CREDS_FILE, GOOGLE_SCOPE, GOOGLE_SCOPES, logger
 from ..utils.date_utils import safe_parse_date_or_none
 
-logger = logging.getLogger(__name__)
 
 class GoogleSheetsManager:
     """Класс для управления Google Sheets"""

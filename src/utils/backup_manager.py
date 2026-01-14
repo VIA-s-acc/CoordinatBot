@@ -6,9 +6,10 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
-import logging
 
-logger = logging.getLogger(__name__)
+import os
+import shutil
+from ..config.settings import logger
 
 class BackupManager:
     """Менеджер резервного копирования"""
@@ -539,3 +540,4 @@ class BackupManager:
 
 # Глобальный экземпляр менеджера резервного копирования
 backup_manager = BackupManager()
+

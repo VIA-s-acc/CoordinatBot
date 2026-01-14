@@ -1,16 +1,15 @@
 """
 Утилита для управления переводами через bot
 """
-import logging
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler
 
-from ...config.settings import ADMIN_IDS, LOCALIZATION_FILE
+from ...config.settings import ADMIN_IDS, LOCALIZATION_FILE, logger
 from ...utils.config_utils import load_json_file, save_json_file
 from ...utils.localization import _
 from ..states.conversation_states import ADD_TRANSLATION_KEY, ADD_TRANSLATION_TEXT, ADD_TRANSLATION_LANG
 
-logger = logging.getLogger(__name__)
 
 async def translation_management(update: Update, context: CallbackContext):
     """Меню управления переводами"""

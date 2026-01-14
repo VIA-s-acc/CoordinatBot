@@ -1,7 +1,6 @@
 """
 Главный файл для запуска бота в новой модульной структуре
 """
-import logging
 import sys
 import os
 import argparse
@@ -51,17 +50,10 @@ from src.bot.handlers.search_commands import (
 )
 from src.bot.handlers.button_handlers import button_handler
 from src.bot.handlers.error_handler import error_handler
-from src.config.settings import TOKEN
+from src.config.settings import TOKEN, logger
 from src.database.database_manager import init_db
 from src.google_integration.async_sheets_worker import start_worker, stop_worker
 
-
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
 
 def main():
     """Основная функция запуска бота"""
@@ -309,7 +301,8 @@ if __name__ == '__main__':
                     src_path = os.path.join(local_data_dir, item)
                     dst_path = os.path.join(DATA_DIR, item)
                     if os.path.isdir(src_path):
-                        shutil.copytree(src_path, dst_path)
+                        if not os.path.exists(dst_path):
+                            shutil.copytree(src_path, dst_path)
                     else:
                         shutil.copy2(src_path, dst_path)
                 logger.info("✅ Данные успешно скопированы в volume")

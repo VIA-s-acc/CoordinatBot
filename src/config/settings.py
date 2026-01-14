@@ -3,6 +3,9 @@
 """
 import os
 from dotenv import load_dotenv
+import logging
+from logging.handlers import RotatingFileHandler
+
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -32,9 +35,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 # Определяем режим работы
 if os.environ.get('DEPLOY_MODE') == 'true':
-    DATA_DIR = '/data'
+    DATA_DIR = '/app_data'
+    LOG_FILE = '/app_data/bot.log'
 else:
     DATA_DIR = os.path.join(BASE_DIR, 'data')
+    LOG_FILE = os.getenv('LOG_FILE', os.path.join(DATA_DIR, 'bot.log'))
+
 
 CREDENTIALS_DIR = os.path.join(BASE_DIR, 'credentials')
 
@@ -70,10 +76,31 @@ else:
     BACKUP_CHAT_ID = None
 
 # Интервал автоматического бэкапа (в часах)
-BACKUP_INTERVAL_HOURS = float(os.getenv('BACKUP_INTERVAL_HOURS', '4'))
+BACKUP_INTERVAL_HOURS = float(os.getenv('BACKUP_INTERVAL_HOURS', '2'))
 
 LOCALIZATION_FILE = os.path.join(BASE_DIR, 'src/config/localization.json')
 
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+formatter = logging.Formatter(
+    '%(asctime)s [%(levelname)s] [%(filename)s] [%(funcName)s] [%(lineno)d] %(name)s: %(message)s'
+)
+file_handler = RotatingFileHandler(
+    LOG_FILE,
+    maxBytes=10*1024*1024, 
+    backupCount=5,           
+    encoding="utf-8"
+)
+file_handler.setFormatter(formatter)
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+
+logger = logging.getLogger("coordinatbot")
+logger.setLevel(LOG_LEVEL)
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+logger.info("Logging initialized")
+logger.info(f"DATA_DIR: {DATA_DIR}, CREDENTIALS_DIR: {CREDENTIALS_DIR}")
 
 
 # Создаем директории если их нет
