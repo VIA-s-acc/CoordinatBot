@@ -26,7 +26,7 @@ class BackupManager:
         
         # Определяем пути к файлам в зависимости от режима
         if os.environ.get('DEPLOY_MODE') == 'true':
-            data_dir = '/data'
+            data_dir = '/app_data'
         else:
             data_dir = 'data'
         
@@ -197,7 +197,7 @@ class BackupManager:
             with zipfile.ZipFile(backup_path, 'r') as zip_file:
                 # Определяем путь для восстановления базы данных
                 if os.environ.get('DEPLOY_MODE') == 'true':
-                    db_restore_dir = '/data'
+                    db_restore_dir = '/app_data'
                 else:
                     db_restore_dir = 'data'
                 
@@ -216,7 +216,7 @@ class BackupManager:
                 
                 # Определяем путь для восстановления файлов
                 if os.environ.get('DEPLOY_MODE') == 'true':
-                    restore_dir = '/data'
+                    restore_dir = '/app_data'
                 else:
                     restore_dir = 'data'
                 

@@ -269,24 +269,24 @@ def main():
 if __name__ == '__main__':
     # Парсинг аргументов командной строки
     parser = argparse.ArgumentParser(description='CoordinatBot - Telegram бот для управления данными')
-    parser.add_argument('-dep', '--deploy', action='store_true', help='Режим деплоя (использует /data volume)')
-    parser.add_argument('-loc', '--local', action='store_true', help='Локальный режим (использует ./data)')
+    parser.add_argument('-dep', '--deploy', action='store_true', help='Режим деплоя (использует /app_data volume)')
+    parser.add_argument('-loc', '--local', action='store_true', help='Локальный режим (использует ./app_data)')
     args = parser.parse_args()
     
     # Определяем режим работы
     if args.deploy:
         os.environ['DEPLOY_MODE'] = 'true'
-        DATA_DIR = '/data'
-        logger.info("🚀 Запуск в режиме деплоя (используется /data volume)")
+        DATA_DIR = '/app_data'
+        logger.info("🚀 Запуск в режиме деплоя (используется /app_data volume)")
     elif args.local:
         os.environ['DEPLOY_MODE'] = 'false'
         DATA_DIR = 'data'
-        logger.info("🏠 Запуск в локальном режиме (используется ./data)")
+        logger.info("🏠 Запуск в локальном режиме (используется ./app_data)")
     else:
         # По умолчанию используем режим деплоя
         os.environ['DEPLOY_MODE'] = 'true'
-        DATA_DIR = '/data'
-        logger.info("🚀 Запуск в режиме деплоя по умолчанию (используется /data volume)")
+        DATA_DIR = '/app_data'
+        logger.info("🚀 Запуск в режиме деплоя по умолчанию (используется /app_data volume)")
     
     # Создаем директорию для данных если ее нет
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -294,20 +294,35 @@ if __name__ == '__main__':
     # Проверяем, нужно ли копировать данные при первом деплое
     if os.environ.get('DEPLOY_MODE') == 'true':
         local_data_dir = 'data'
-        if os.path.exists(local_data_dir) and not os.listdir(DATA_DIR):
-            logger.info("🔄 Обнаружены локальные данные, копируем в volume...")
+        if os.path.exists(local_data_dir):
             try:
-                for item in os.listdir(local_data_dir):
-                    src_path = os.path.join(local_data_dir, item)
-                    dst_path = os.path.join(DATA_DIR, item)
-                    if os.path.isdir(src_path):
-                        if not os.path.exists(dst_path):
+                local_items = set(os.listdir(local_data_dir))
+                volume_items = set(os.listdir(DATA_DIR))
+
+                if local_items - volume_items:
+                    logger.info("🔄 Обнаружено расхождение данных, выполняется полная синхронизация")
+
+                    for item in os.listdir(local_data_dir):
+                        src_path = os.path.join(local_data_dir, item)
+                        dst_path = os.path.join(DATA_DIR, item)
+
+                        if os.path.isdir(dst_path):
+                            shutil.rmtree(dst_path)
+                        elif os.path.isfile(dst_path):
+                            os.remove(dst_path)
+
+                        if os.path.isdir(src_path):
                             shutil.copytree(src_path, dst_path)
-                    else:
-                        shutil.copy2(src_path, dst_path)
-                logger.info("✅ Данные успешно скопированы в volume")
+                        else:
+                            shutil.copy2(src_path, dst_path)
+
+                    logger.info("✅ Полная синхронизация данных завершена")
+                else:
+                    logger.info("✅ Структура данных полностью совпадает, синхронизация не требуется")
+
             except Exception as e:
-                logger.error(f"❌ Ошибка при копировании данных: {e}")
+                logger.error(f"❌ Ошибка при синхронизации данных: {e}")
+
     
     # Инициализация файлов конфигурации, если они не существуют
     import json

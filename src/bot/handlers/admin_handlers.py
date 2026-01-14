@@ -32,20 +32,20 @@ async def send_data_files_command(update: Update, context: CallbackContext):
 
     # Определяем путь к данным в зависимости от режима
     if os.environ.get('DEPLOY_MODE') == 'true':
-        data_dir = '/data'
+        data_dir = '/app_data'
     else:
         data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data'))
     
     if not os.path.exists(data_dir):
-        await update.message.reply_text("❌ Папка data не найдена!")
+        await update.message.reply_text(f"❌ Չի գտնված {data_dir}-ը")
         return
 
     files = [f for f in os.listdir(data_dir) if os.path.isfile(os.path.join(data_dir, f))]
     if not files:
-        await update.message.reply_text("ℹ️ В папке data нет файлов для отправки.")
+        await update.message.reply_text(f"ℹ️ {data_dir}-ում ֆայլ չկա.")
         return
 
-    await update.message.reply_text(f"📤 Отправляю {len(files)} файлов из папки data...")
+    await update.message.reply_text(f"📤 Ուղարկում եմ {len(files)} ֆայլ {data_dir}-ից...")
     for fname in files:
         fpath = os.path.join(data_dir, fname)
         try:
@@ -53,8 +53,8 @@ async def send_data_files_command(update: Update, context: CallbackContext):
             with open(fpath, 'rb') as f:
                 await context.bot.send_document(chat_id=user_id, document=f, filename=fname)
         except Exception as e:
-            await update.message.reply_text(f"❌ Не удалось отправить {fname}: {e}")
-    await update.message.reply_text("✅ Все файлы отправлены.")
+            await update.message.reply_text(f"❌ չստացվեց {fname}: {e}")
+    await update.message.reply_text("✅ բոլոր ֆայլերը ուղարկված են.")
 
 async def set_log_command(update: Update, context: CallbackContext):
     """Команда установки лог-чата"""
@@ -680,7 +680,7 @@ async def send_backup_to_chat(context: CallbackContext, chat_id: int, test_mode:
     """
     # Определяем путь к данным в зависимости от режима
     if os.environ.get('DEPLOY_MODE') == 'true':
-        data_dir = '/data'
+        data_dir = '/app_data'
     else:
         from ...config.settings import DATA_DIR
         data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data'))
@@ -703,7 +703,7 @@ async def send_backup_to_chat(context: CallbackContext, chat_id: int, test_mode:
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                f"🔄 <b>Ավտոմատ Բեքափ{test_label}</b>\n\n"
+                f"🔄 <b>Ավտոմատ Բեքափ{test_label}-dir-{data_dir}</b>\n\n"
                 f"📅 Ամսաթիվ: {timestamp}\n"
                 f"📁 Ֆայլեր: {len(files)}\n"
                 f"━━━━━━━━━━━━━━━"
