@@ -359,7 +359,7 @@ async def user_payments_list(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Кнопки для каждого платежа
     for payment in current_payments:
-        date_str = payment.get('created_at', '')[:10] if payment.get('created_at') else '—'
+        date_str = payment.get('date_to', '')[:10] if payment.get('date_to') else '—'
         button_text = f"{payment['amount']:,.0f} դրամ | {date_str}"
         if payment.get('comment'):
             button_text += f" | {payment['comment'][:20]}"
