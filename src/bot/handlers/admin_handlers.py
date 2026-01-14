@@ -31,7 +31,12 @@ async def send_data_files_command(update: Update, context: CallbackContext):
         await update.message.reply_text("❌ Դուք չունեք այս հրամանը կատարելու թույլտվություն:")
         return
 
-    data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data'))
+    # Определяем путь к данным в зависимости от режима
+    if os.environ.get('DEPLOY_MODE') == 'true':
+        data_dir = '/data'
+    else:
+        data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data'))
+    
     if not os.path.exists(data_dir):
         await update.message.reply_text("❌ Папка data не найдена!")
         return

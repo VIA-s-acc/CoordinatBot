@@ -23,11 +23,17 @@ class BackupManager:
         self.backup_dir = Path(backup_dir)
         self.backup_dir.mkdir(exist_ok=True)
         
+        # Определяем пути к файлам в зависимости от режима
+        if os.environ.get('DEPLOY_MODE') == 'true':
+            data_dir = '/data'
+        else:
+            data_dir = 'data'
+        
         # Пути к важным файлам
-        self.database_path = Path("data/expenses.db")
-        self.users_path = Path("data/users.json")
-        self.allowed_users_path = Path("data/allowed_users.json")
-        self.config_path = Path("data/bot_config.json")
+        self.database_path = Path(f"{data_dir}/expenses.db")
+        self.users_path = Path(f"{data_dir}/users.json")
+        self.allowed_users_path = Path(f"{data_dir}/allowed_users.json")
+        self.config_path = Path(f"{data_dir}/bot_config.json")
         self.localization_path = Path("src/config/localization.json")
         self.credentials_dir = Path("credentials")
         
@@ -188,23 +194,44 @@ class BackupManager:
             restored_files = []
             
             with zipfile.ZipFile(backup_path, 'r') as zip_file:
+                # Определяем путь для восстановления базы данных
+                if os.environ.get('DEPLOY_MODE') == 'true':
+                    db_restore_dir = '/data'
+                else:
+                    db_restore_dir = 'data'
+                
                 # Восстанавливаем базу данных
                 if "data/expenses.db" in zip_file.namelist():
                     # Создаем директорию если не существует
-                    self.database_path.parent.mkdir(exist_ok=True)
+                    os.makedirs(db_restore_dir, exist_ok=True)
                     
                     # Извлекаем базу данных
-                    zip_file.extract("data/expenses.db", ".")
-                    restored_files.append("data/expenses.db")
-                    logger.info("База данных восстановлена")
+                    extracted_path = zip_file.extract("data/expenses.db", ".")
+                    # Перемещаем в правильную директорию
+                    final_db_path = os.path.join(db_restore_dir, "expenses.db")
+                    shutil.move(extracted_path, final_db_path)
+                    restored_files.append(final_db_path)
+                    logger.info(f"База данных восстановлена в {final_db_path}")
+                
+                # Определяем путь для восстановления файлов
+                if os.environ.get('DEPLOY_MODE') == 'true':
+                    restore_dir = '/data'
+                else:
+                    restore_dir = 'data'
                 
                 # Восстанавливаем файлы пользователей
-                user_files = ["data/users.json", "data/allowed_users.json", "data/bot_config.json"]
+                user_files = ["users.json", "allowed_users.json", "bot_config.json"]
                 for user_file in user_files:
-                    if user_file in zip_file.namelist():
-                        zip_file.extract(user_file, ".")
-                        restored_files.append(user_file)
-                        logger.info(f"Файл {user_file} восстановлен")
+                    file_in_archive = f"data/{user_file}"
+                    if file_in_archive in zip_file.namelist():
+                        # Извлекаем файл
+                        extracted_path = zip_file.extract(file_in_archive, ".")
+                        # Перемещаем в правильную директорию
+                        final_path = os.path.join(restore_dir, user_file)
+                        os.makedirs(restore_dir, exist_ok=True)
+                        shutil.move(extracted_path, final_path)
+                        restored_files.append(final_path)
+                        logger.info(f"Файл {final_path} восстановлен")
                 
                 # Восстанавливаем локализацию
                 if "src/config/localization.json" in zip_file.namelist():

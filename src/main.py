@@ -4,6 +4,8 @@
 import logging
 import sys
 import os
+import argparse
+import shutil
 
 # Добавляем корневую папку в path для импортов
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -273,9 +275,56 @@ def main():
         stop_worker()
 
 if __name__ == '__main__':
+    # Парсинг аргументов командной строки
+    parser = argparse.ArgumentParser(description='CoordinatBot - Telegram бот для управления данными')
+    parser.add_argument('-dep', '--deploy', action='store_true', help='Режим деплоя (использует /data volume)')
+    parser.add_argument('-loc', '--local', action='store_true', help='Локальный режим (использует ./data)')
+    args = parser.parse_args()
+    
+    # Определяем режим работы
+    if args.deploy:
+        os.environ['DEPLOY_MODE'] = 'true'
+        DATA_DIR = '/data'
+        logger.info("🚀 Запуск в режиме деплоя (используется /data volume)")
+    elif args.local:
+        os.environ['DEPLOY_MODE'] = 'false'
+        DATA_DIR = 'data'
+        logger.info("🏠 Запуск в локальном режиме (используется ./data)")
+    else:
+        # По умолчанию используем режим деплоя
+        os.environ['DEPLOY_MODE'] = 'true'
+        DATA_DIR = '/data'
+        logger.info("🚀 Запуск в режиме деплоя по умолчанию (используется /data volume)")
+    
+    # Создаем директорию для данных если ее нет
+    os.makedirs(DATA_DIR, exist_ok=True)
+    
+    # Проверяем, нужно ли копировать данные при первом деплое
+    if os.environ.get('DEPLOY_MODE') == 'true':
+        local_data_dir = 'data'
+        if os.path.exists(local_data_dir) and not os.listdir(DATA_DIR):
+            logger.info("🔄 Обнаружены локальные данные, копируем в volume...")
+            try:
+                for item in os.listdir(local_data_dir):
+                    src_path = os.path.join(local_data_dir, item)
+                    dst_path = os.path.join(DATA_DIR, item)
+                    if os.path.isdir(src_path):
+                        shutil.copytree(src_path, dst_path)
+                    else:
+                        shutil.copy2(src_path, dst_path)
+                logger.info("✅ Данные успешно скопированы в volume")
+            except Exception as e:
+                logger.error(f"❌ Ошибка при копировании данных: {e}")
+    
     # Инициализация файлов конфигурации, если они не существуют
     import json
     from src.config.settings import USERS_FILE, ALLOWED_USERS_FILE, BOT_CONFIG_FILE
+    
+    # Обновляем пути к файлам в соответствии с режимом
+    if os.environ.get('DEPLOY_MODE') == 'true':
+        USERS_FILE = os.path.join(DATA_DIR, 'users.json')
+        ALLOWED_USERS_FILE = os.path.join(DATA_DIR, 'allowed_users.json')
+        BOT_CONFIG_FILE = os.path.join(DATA_DIR, 'bot_config.json')
     
     if not os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'w', encoding='utf-8') as f:

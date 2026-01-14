@@ -29,7 +29,13 @@ class UserRole:
 
 # Пути к файлам
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
+
+# Определяем режим работы
+if os.environ.get('DEPLOY_MODE') == 'true':
+    DATA_DIR = '/data'
+else:
+    DATA_DIR = os.path.join(BASE_DIR, 'data')
+
 CREDENTIALS_DIR = os.path.join(BASE_DIR, 'credentials')
 
 # Пути к файлам данных
