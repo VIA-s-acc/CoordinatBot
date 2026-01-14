@@ -12,7 +12,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import CallbackContext
 from src.bot.keyboards.inline_keyboards import create_main_menu, create_back_to_menu_keyboard
 from src.utils.config_utils import is_user_allowed, get_user_settings, load_users, save_users
-from src.config.settings import ADMIN_IDS
+from src.config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID
 from src.database.database_manager import init_db
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,6 @@ async def start(update: Update, context: CallbackContext):
     
     if user_id_str not in users:
         users[user_id_str] = {
-            'active_spreadsheet_id': None,
             'active_sheet_name': None,
             'name': user_name,
             'display_name': None
@@ -76,7 +75,7 @@ async def start(update: Update, context: CallbackContext):
     )
     
     # Проверяем настройки пользователя
-    if not user_settings.get('active_spreadsheet_id') or not user_settings.get('active_sheet_name'):
+    if not ACTIVE_SPREADSHEET_ID or not user_settings.get('active_sheet_name'):
         welcome_text += (
             "⚠️ <b>Կարգավորում անհրաժեշտ է!</b>\n"
             "Սկսելու համար ընտրեք Google Spreadsheet և թերթիկ:\n\n"

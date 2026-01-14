@@ -182,6 +182,12 @@ class PaymentsSheetsManager:
 
             worksheet = spreadsheet.worksheet(sheet_name)
 
+            # Проверяем, существует ли уже платеж с таким ID
+            id_column = worksheet.col_values(1)  # Первая колонка - ID
+            if str(payment_id) in id_column:
+                logger.info(f"Платеж #{payment_id} уже существует в листе '{sheet_name}', пропускаем")
+                return True  # Возвращаем True, т.к. это не ошибка
+
             # Подготавливаем данные для записи
             created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -253,9 +259,18 @@ class PaymentsSheetsManager:
 
             worksheet = spreadsheet.worksheet(sheet_name)
 
-            # Подготавливаем данные для пакетной вставки
+            # Получаем существующие ID для проверки дубликатов
+            existing_ids = set(worksheet.col_values(1))  # Первая колонка - ID
+
+            # Подготавливаем данные для пакетной вставки (только новые платежи)
             rows_data = []
+            skipped_count = 0
             for payment in payments:
+                payment_id = str(payment.get('payment_id', ''))
+                # Пропускаем, если платеж уже существует
+                if payment_id in existing_ids:
+                    skipped_count += 1
+                    continue
                 created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
                 row_data = [
@@ -271,12 +286,17 @@ class PaymentsSheetsManager:
                 ]
                 rows_data.append(row_data)
 
-            # Пакетная вставка всех строк за один раз
-            worksheet.append_rows(rows_data)
-
-            logger.info(
-                f"✅ Пакетная вставка: {len(payments)} платежей добавлено в лист '{sheet_name}'"
-            )
+            # Пакетная вставка всех строк за один раз (только если есть новые)
+            if rows_data:
+                worksheet.append_rows(rows_data)
+                logger.info(
+                    f"✅ Пакетная вставка: {len(rows_data)} платежей добавлено в лист '{sheet_name}'"
+                    f"{f', пропущено {skipped_count} дубликатов' if skipped_count else ''}"
+                )
+            else:
+                logger.info(
+                    f"Все {len(payments)} платежей уже существуют в листе '{sheet_name}', пропускаем"
+                )
             return True
 
         except Exception as e:

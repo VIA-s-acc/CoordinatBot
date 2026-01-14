@@ -17,7 +17,6 @@ def create_main_menu(user_id=None):
         select_sheet_text = _("menu.select_sheet", user_id)
         status_text = _("menu.status", user_id)
         stats_text = _("menu.stats", user_id)
-        select_spreadsheet_text = _("menu.select_spreadsheet", user_id)
         payments_text = _("menu.payments", user_id)
         my_payments_text = _("menu.my_payments", user_id)
         analytics_text = _("menu.analytics", user_id)

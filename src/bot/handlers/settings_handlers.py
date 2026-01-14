@@ -5,7 +5,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 
-from ...config.settings import ADMIN_IDS
+from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID
 from ...utils.localization import (
     _, get_user_language, set_user_language, 
     get_available_languages
@@ -272,7 +272,7 @@ async def sort_sheet_by_date_handler(update: Update, context: CallbackContext):
         from ...google_integration.sheets_manager import sort_sheet_by_date
         
         user_settings = get_user_settings(user_id)
-        spreadsheet_id = user_settings.get('active_spreadsheet_id')
+        spreadsheet_id = ACTIVE_SPREADSHEET_ID
         sheet_name = user_settings.get('active_sheet_name')
         
         if not spreadsheet_id or not sheet_name:

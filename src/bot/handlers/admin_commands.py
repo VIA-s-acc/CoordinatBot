@@ -120,7 +120,6 @@ async def allow_user_command(update: Update, context: CallbackContext):
         user_id_str = str(new_user_id)
         if user_id_str not in users:
             users[user_id_str] = {
-                'active_spreadsheet_id': None,
                 'active_sheet_name': None,
                 'name': f"User {new_user_id}",
                 'display_name': None

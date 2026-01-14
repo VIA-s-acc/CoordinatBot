@@ -259,21 +259,8 @@ async def set_role_for_new_user(update: Update, context: ContextTypes.DEFAULT_TY
 
     from ...utils.config_utils import update_user_settings
 
-    # Автоматически устанавливаем active_spreadsheet_id из существующего пользователя
-    users = load_users()
-    active_spreadsheet_id = None
-    for uid, user_data in users.items():
-        if user_data.get('active_spreadsheet_id'):
-            active_spreadsheet_id = user_data['active_spreadsheet_id']
-            break
-
-    # Создаем словарь с настройками пользователя
-    user_settings = {'display_name': display_name}
-    if active_spreadsheet_id:
-        user_settings['active_spreadsheet_id'] = active_spreadsheet_id
-        logger.info(f"Автоматически установлен active_spreadsheet_id: {active_spreadsheet_id} для пользователя {new_user_id}")
-
-    update_user_settings(new_user_id, user_settings)
+    # Устанавливаем display_name для пользователя
+    update_user_settings(new_user_id, {'display_name': display_name})
 
     role_display = get_role_display_name(role)
 

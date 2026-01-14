@@ -18,7 +18,7 @@ from ...utils.config_utils import is_user_allowed, get_user_settings, update_use
 from ...utils.localization import _
 from ...database.database_manager import get_db_stats
 from ...utils.sheets_cache import get_cached_sheets_info, get_cached_spreadsheets
-from ...config.settings import ADMIN_IDS
+from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID
 
 from .payment_handlers import pay_menu_handler, pay_user_handler, send_payment_report
 from .settings_handlers import (
@@ -45,7 +45,7 @@ async def show_sheet_selection_for_add_record(update: Update, context: CallbackC
     
     # Получаем настройки пользователя
     user_settings = get_user_settings(user_id)
-    spreadsheet_id = user_settings.get('active_spreadsheet_id')
+    spreadsheet_id = ACTIVE_SPREADSHEET_ID
     
     if not spreadsheet_id:
         logger.warning(f"У пользователя {user_id} не настроен активный spreadsheet")
@@ -194,16 +194,6 @@ async def button_handler(update: Update, context: CallbackContext):
             f"👤 Աշխատակից: {display_name}",
             reply_markup=create_payment_menu(display_name)
         )
-    
-    # Выбор таблицы
-    elif data == "select_spreadsheet":
-        await select_spreadsheet_menu(update, context)
-    
-    elif data.startswith("spreadsheet_"):
-        await select_spreadsheet(update, context)
-    
-    elif data.startswith("final_sheet_"):
-        await select_final_sheet(update, context)
     
     # Меню выбора листа
     elif data == "select_sheet_menu" or data == "select_sheet":
@@ -525,7 +515,7 @@ async def show_status(update: Update, context: CallbackContext):
     
     user_settings = get_user_settings(user_id)
     
-    spreadsheet_id = user_settings.get('active_spreadsheet_id')
+    spreadsheet_id = ACTIVE_SPREADSHEET_ID
     sheet_name = user_settings.get('active_sheet_name')
     
     status_text = "📊 Ընթացիկ կարգավիճակ:\n\n"
@@ -628,8 +618,7 @@ async def select_spreadsheet(update: Update, context: CallbackContext):
             )
             return
         
-        # Сохраняем выбранную таблицу
-        update_user_settings(user_id, {'active_spreadsheet_id': spreadsheet_id})
+        # ACTIVE_SPREADSHEET_ID теперь глобальный, не сохраняем per-user
         
         keyboard = []
         for sheet in sheets_info:
@@ -676,7 +665,7 @@ async def select_sheet_menu(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     
     user_settings = get_user_settings(user_id)
-    spreadsheet_id = user_settings.get('active_spreadsheet_id')
+    spreadsheet_id = ACTIVE_SPREADSHEET_ID
     
     if not spreadsheet_id:
         await query.edit_message_text(

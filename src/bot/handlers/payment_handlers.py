@@ -7,7 +7,7 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler
 
-from ...config.settings import ADMIN_IDS
+from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID
 import os
 from ...utils.config_utils import load_users, get_user_settings, send_to_log_chat
 from ...database.database_manager import add_payment, get_payments, get_all_records
@@ -125,15 +125,10 @@ async def start_add_payment(update: Update, context: CallbackContext):
     # Проверяем роль пользователя
     role = get_role_by_display_name(display_name)
 
-    # Если это SECONDARY пользователь, показываем список его таблиц
+    # Если это SECONDARY пользователь, используем глобальную таблицу
     if role == UserRole.SECONDARY:
-        # Получаем spreadsheet_id пользователя
-        users = load_users()
-        user_spreadsheet_id = None
-        for uid, udata in users.items():
-            if udata.get('display_name') == display_name:
-                user_spreadsheet_id = udata.get('active_spreadsheet_id')
-                break
+        # Используем глобальный ACTIVE_SPREADSHEET_ID
+        user_spreadsheet_id = ACTIVE_SPREADSHEET_ID
 
         if not user_spreadsheet_id:
             await query.edit_message_text(
@@ -384,9 +379,9 @@ async def get_payment_comment(update: Update, context: CallbackContext):
         spreadsheet_id = secondary_spreadsheet_id
         sheet_name = secondary_sheet_name
     else:
-        # Для остальных используем активную таблицу админа
+        # Для остальных используем глобальную таблицу
         user_settings = get_user_settings(user_id)
-        spreadsheet_id = user_settings.get('active_spreadsheet_id')
+        spreadsheet_id = ACTIVE_SPREADSHEET_ID
         sheet_name = user_settings.get('active_sheet_name')
 
     # Добавляем платеж в базу данных

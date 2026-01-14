@@ -13,6 +13,7 @@ from ...utils.config_utils import is_user_allowed, get_user_settings, update_use
 from ...utils.formatting import format_record_info
 from ...database.database_manager import add_record_to_db
 from ...google_integration.async_sheets_worker import add_record_async
+from ...config.settings import ACTIVE_SPREADSHEET_ID
 from ...utils.report_manager import send_report
 from ..handlers.translation_handlers import _
 
@@ -57,7 +58,7 @@ async def start_add_record(update: Update, context: CallbackContext):
     user_settings = get_user_settings(user_id)
     
     # Проверяем настройки
-    if not user_settings.get('active_spreadsheet_id'):
+    if not ACTIVE_SPREADSHEET_ID:
         keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="back_to_menu")]]
         await query.edit_message_text(
             "❌ Նախ պետք է ընտրել աղյուսակը:\n"
@@ -142,7 +143,7 @@ async def start_add_skip_record(update: Update, context: CallbackContext):
     user_settings = get_user_settings(user_id)
 
     # Проверяем настройки
-    if not user_settings.get('active_spreadsheet_id'):
+    if not ACTIVE_SPREADSHEET_ID:
         keyboard = [[InlineKeyboardButton(_("menu.back" , user_id), callback_data="back_to_menu")]]
         await query.edit_message_text(
             "❌ Նախ պետք է ընտրել աղյուսակը:\n"
@@ -456,7 +457,7 @@ async def get_amount(update: Update, context: CallbackContext):
 
         # Добавляем текущие активные таблицу и лист пользователя
         user_settings = get_user_settings(user_id)
-        spreadsheet_id = user_settings.get('active_spreadsheet_id')
+        spreadsheet_id = ACTIVE_SPREADSHEET_ID
         sheet_name = user_settings.get('active_sheet_name')
         context.user_data['record']['spreadsheet_id'] = spreadsheet_id
         context.user_data['record']['sheet_name'] = sheet_name

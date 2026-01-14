@@ -45,10 +45,13 @@ GOOGLE_SCOPE = [
     'https://www.googleapis.com/auth/drive',
 ]
 GOOGLE_SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
-GOOGLE_SHEET_WORKERS = 2  # Количество воркеров для работы с Google Sheets
+GOOGLE_SHEET_WORKERS = 4  # Количество воркеров для работы с Google Sheets
 
 # ID таблицы для хранения платежей (отдельная от основной)
 PAYMENTS_SPREADSHEET_ID = os.getenv('PAYMENTS_SPREADSHEET_ID')
+
+# ID основной таблицы Google Sheets
+ACTIVE_SPREADSHEET_ID = os.getenv('ACTIVE_SPREADSHEET_ID')
 
 # ID чата для автоматических бэкапов
 BACKUP_CHAT_ID = os.getenv('BACKUP_CHAT_ID')

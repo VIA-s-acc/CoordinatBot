@@ -84,7 +84,6 @@ def get_user_settings(user_id: int):
     if user_id_str not in users:
         # Создаем запись для нового пользователя
         users[user_id_str] = {
-            'active_spreadsheet_id': None,
             'active_sheet_name': None,
             'display_name': None
         }
@@ -177,7 +176,6 @@ def set_user_role(user_id: int, role: str):
 
     if user_id_str not in users:
         users[user_id_str] = {
-            'active_spreadsheet_id': None,
             'active_sheet_name': None,
             'display_name': None
         }

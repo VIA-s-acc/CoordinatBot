@@ -157,7 +157,6 @@ async def allow_user_command(update: Update, context: CallbackContext):
         user_id_str = str(new_user_id)
         if user_id_str not in users:
             users[user_id_str] = {
-                'active_spreadsheet_id': None,
                 'active_sheet_name': None,
                 'name': f'User {new_user_id}',
                 'display_name': None
@@ -273,7 +272,6 @@ async def set_user_name_command(update: Update, context: CallbackContext):
         
         if user_id_str not in users:
             users[user_id_str] = {
-                'active_spreadsheet_id': None,
                 'active_sheet_name': None,
                 'name': f'User {target_user_id}',
                 'display_name': display_name
@@ -513,9 +511,8 @@ async def set_sheet_command(update: Update, context: CallbackContext):
             await update.message.reply_text("❌ Հնարավոր չէ մուտք գործել աղյուսակ: Ստուգեք ID-ն և մուտքի իրավունքները:")
             return
         
-        from ...utils.config_utils import update_user_settings
-        # Сохраняем ID таблицы для пользователя
-        update_user_settings(user_id, {'active_spreadsheet_id': spreadsheet_id})
+        # ACTIVE_SPREADSHEET_ID теперь задаётся через .env, здесь только информируем
+        # (функциональность изменения через бот удалена)
         
         await update.message.reply_text(
             f"✅ Google Spreadsheet միացված է:\n"
