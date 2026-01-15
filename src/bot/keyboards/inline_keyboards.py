@@ -2,7 +2,7 @@
 Инлайн клавиатуры для бота
 """
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from ...config.settings import ADMIN_IDS, UserRole
+from ...config.settings import ADMIN_IDS, UserRole, logger
 from ...utils.config_utils import (
     load_users, get_user_role, is_super_admin, is_admin,
     can_add_records, can_view_payments, is_client, is_secondary
@@ -202,8 +202,6 @@ def create_add_record_sheet_selection(sheets_info, record_type):
         sheets_info: список информации о листах
         record_type: тип записи ("record" или "skip")
     """
-    import logging
-    logger = logging.getLogger(__name__)
     
     keyboard = []
     logger.info(f"Creating sheet selection keyboard with {len(sheets_info)} sheets for record_type: {record_type}")

@@ -47,7 +47,7 @@ async def send_data_files_to_admin(update: Update, context: CallbackContext):
             with open(fpath, 'rb') as f:
                 await context.bot.send_document(chat_id=user_id, document=f, filename=fname)
         except Exception as e:
-            logger.error(f"Ошибка отправки файла {fname}: {e}")
+            logger.error(f"Error sending file {fname}: {e}")
             await update.message.reply_text(f"❌ Սխալ {fname} ֆայլի ուղարկման ժամանակ: {e}")
 
 # Состояния для ConversationHandler платежей
@@ -169,7 +169,7 @@ async def start_add_payment(update: Update, context: CallbackContext):
             return PAYMENT_SHEET_SELECTION
 
         except Exception as e:
-            logger.error(f"Ошибка получения листов для {display_name}: {e}")
+            logger.error(f"Error getting sheets for {display_name}: {e}")
             await query.edit_message_text(
                 f"❌ Ошибка при получении списка листов: {e}"
             )
@@ -403,8 +403,8 @@ async def get_payment_comment(update: Update, context: CallbackContext):
 
         # Создаем запись расхода в той же таблице, куда был добавлен платеж
         # (spreadsheet_id и sheet_name уже определены выше для платежа)
-        logger.info(f"Отправитель: {sender_name} (ID: {sender_id})")
-        logger.info(f"Создание записи расхода в таблице: {spreadsheet_id}, лист: {sheet_name}")
+        logger.info(f"Sender: {sender_name} (ID: {sender_id})")
+        logger.info(f"Creating expense record in table: {spreadsheet_id}, sheet: {sheet_name}")
 
         # Создаем запись расхода в выбранной таблице
         expense_record_created = False
@@ -445,12 +445,12 @@ async def get_payment_comment(update: Update, context: CallbackContext):
                     sheet_name=sheet_name,  # Используем sheet_name платежа
                     record=expense_record
                 )
-                logger.info(f"Создана запись расхода #{record_id} для платежа {display_name}")
+                logger.info(f"Created expense record #{record_id} for payment {display_name}")
                 expense_record_created = True
             else:
-                logger.error(f"Не удалось добавить запись расхода в БД для платежа {display_name}")
+                logger.error(f"Failed to add expense record to DB for payment {display_name}")
         else:
-            logger.warning(f"Не указана таблица для платежа. Запись расхода не создана.")
+            logger.warning(f"Table not specified for payment. Expense record not created.")
 
         # Получаем ID получателя
         recipient_id = await get_user_id_by_display_name(display_name)
@@ -508,7 +508,7 @@ async def get_payment_comment(update: Update, context: CallbackContext):
 
                         # Если для чата настроен конкретный лист, отправляем только для этого листа
                         if configured_sheet and configured_sheet != sheet_name:
-                            logger.info(f"Пропускаем отчет о платеже для чата {chat_id}: лист '{sheet_name}' не соответствует '{configured_sheet}'")
+                            logger.info(f"Skipping payment report for chat {chat_id}: sheet '{sheet_name}' does not match '{configured_sheet}'")
                             continue
 
                         await context.bot.send_message(
@@ -516,13 +516,13 @@ async def get_payment_comment(update: Update, context: CallbackContext):
                             text=log_message,
                             parse_mode='HTML'
                         )
-                        logger.info(f"Сообщение о платеже отправлено в report_chat {chat_id}")
+                        logger.info(f"Payment message sent to report_chat {chat_id}")
                     except Exception as e:
-                        logger.error(f"Ошибка отправки в report_chat {chat_id}: {e}")
+                        logger.error(f"Error sending to report_chat {chat_id}: {e}")
             else:
-                logger.warning("Нет настроенных report_chats в bot_config.json")
+                logger.warning("No configured report_chats in bot_config.json")
         except Exception as e:
-            logger.error(f"Ошибка отправки в report_chats: {e}")
+            logger.error(f"Error sending to report_chats: {e}")
         
     else:
         await update.effective_chat.send_message("❌ Սխալ վճարումն ավելացնելիս:")
@@ -553,7 +553,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
             try:
                 record['date'] = normalize_date(record['date'])
             except Exception as e:
-                logger.error(f"Ошибка нормализации даты для записи {record}: {e}")
+                logger.error(f"Error normalizing date for record {record}: {e}")
                 continue
 
             # Применяем фильтры по датам в зависимости от пользователя
@@ -562,12 +562,12 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
                 record_date = safe_parse_date_or_none(record['date'])
                 
                 if record_date is None:
-                    logger.warning(f"Не удалось распарсить дату '{record['date']}' для записи от {supplier}, пропускаем")
+                    logger.warning(f"Failed to parse date '{record['date']}' for record from {supplier}, skipping")
                     continue
                     
                 record['date'] = record_date
             except Exception as e:
-                logger.error(f"Ошибка парсинга даты '{record.get('date')}' для записи от {supplier}: {e}, пропускаем")
+                logger.error(f"Error parsing date '{record.get('date')}' for record from {supplier}: {e}, skipping")
                 continue
             if record['supplier'] == "Նարեկ":
                 start_date = datetime.strptime("2025-05-10", '%Y-%m-%d').date()
@@ -576,7 +576,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
             if record_date >= start_date:
                 filtered_records.append(record)
             else:
-                logger.info(f"Запись от {supplier} (дата: {record_date}) не проходит фильтрацию по дате")
+                logger.info(f"Record from {supplier} (date: {record_date}) does not pass date filtering")
 
         # Проверяем наличие платежей даже если нет записей
         has_records = len(filtered_records) > 0
@@ -837,7 +837,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
         await send_to_log_chat(context, f"Ստեղծվել են վճարային հաշվետվություններ {display_name}-ի համար")
         
     except Exception as e:
-        logger.error(f"Ошибка создания отчета для {display_name}: {e}")
+        logger.error(f"Error creating report for {display_name}: {e}")
         user_id = update.effective_user.id
         back_button = InlineKeyboardButton(_("menu.back", user_id), callback_data=f"pay_user_{display_name}" if user_id in ADMIN_IDS else "back_to_menu")
         keyboard = [[back_button]]

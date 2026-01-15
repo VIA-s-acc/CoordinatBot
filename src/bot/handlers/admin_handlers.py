@@ -364,7 +364,7 @@ async def sync_sheets_command(update: Update, context: CallbackContext):
         await send_to_log_chat(context, f"Լրիվ համաժամեցում: {stats['processed_sheets']} աղյուսակ, {stats['new_records']} նոր գրառում")
 
     except Exception as e:
-        logger.error(f"Ошибка полной синхронизации: {e}")
+        logger.error(f"Error during full synchronization: {e}")
         await update.message.reply_text(f"❌ Սխալ լրիվ համաժամեցման ժամանակ: {e}")
 
 
@@ -377,16 +377,16 @@ def initialize_and_sync_sheets():
     for spreadsheet in spreadsheets:
         spreadsheet_id = spreadsheet['id']
         spreadsheet_name = spreadsheet['name']
-        logger.info(f"🔄 Обработка таблицы: {spreadsheet_name} ({spreadsheet_id})")
+        logger.info(f"Processing spreadsheet: {spreadsheet_name} ({spreadsheet_id})")
 
         sheet = open_sheet_by_id(spreadsheet_id)
         if not sheet:
-            logger.error(f"❌ Не удалось открыть таблицу: {spreadsheet_name}")
+            logger.error(f"Failed to open spreadsheet: {spreadsheet_name}")
             continue
 
         for worksheet in sheet.worksheets():
             sheet_name = worksheet.title
-            logger.info(f"  📋 Лист: {sheet_name}")
+            logger.info(f"  Sheet: {sheet_name}")
 
             try:
                 rows = worksheet.get_all_records()
@@ -423,13 +423,13 @@ def initialize_and_sync_sheets():
                     # Если cleaned_amount пуст, то присваиваем 0.0
                     if not cleaned_amount:
                         amount = 0.0
-                        logger.warning(f"⚠️ Пустое значение в колонке суммы для строки {row}")
+                        logger.warning(f"Empty value in amount column for row {row}")
                     else:
                         try:
                             amount = float(cleaned_amount)
                         except ValueError:
                             amount = 0.0
-                            logger.warning(f"⚠️ Невозможно преобразовать сумму '{raw_amount}' → 0.0")
+                            logger.warning(f"Cannot convert amount '{raw_amount}' → 0.0")
 
                     # 📦 Подготовка записи
                     user_id = get_user_id_by_name(row.get('մատակարար', ''))
@@ -448,9 +448,9 @@ def initialize_and_sync_sheets():
                     if not get_record_from_db(row_id):
                         success = add_record_to_db(record)
                         if success:
-                            logger.info(f"    ➕ Добавлена запись в БД: {row_id}")
+                            logger.info(f"    Added record to DB: {row_id}")
                         else:
-                            logger.warning(f"    ⚠️ Не удалось добавить запись в БД: {row_id}")
+                            logger.warning(f"    Failed to add record to DB: {row_id}")
                     new_rows.append([
                         row_id,
                         normalized_date,
@@ -465,10 +465,10 @@ def initialize_and_sync_sheets():
                 worksheet.clear()
                 worksheet.update(f"A1:F{len(all_data)}", all_data)
 
-                logger.info(f"    ✅ Лист {sheet_name} пересоздан ({len(new_rows)} строк)")
+                logger.info(f"    Sheet {sheet_name} recreated ({len(new_rows)} rows)")
 
             except Exception as e:
-                logger.error(f"    ❌ Ошибка при обработке листа {sheet_name}: {e}")
+                logger.error(f"    Error processing sheet {sheet_name}: {e}")
 
 
 
@@ -662,7 +662,7 @@ async def add_backup_chat_command(update: Update, context: CallbackContext):
         await send_backup_to_chat(context, chat_id, test_mode=True)
 
     except Exception as e:
-        logger.error(f"Ошибка при установке backup chat: {e}", exc_info=True)
+        logger.error(f"Error setting backup chat: {e}", exc_info=True)
         await update.message.reply_text(
             f"❌ Սխալ բեքափ չատ սահմանելիս:\n<code>{str(e)}</code>",
             parse_mode="HTML"
@@ -687,13 +687,13 @@ async def send_backup_to_chat(context: CallbackContext, chat_id: int, test_mode:
 
     try:
         if not os.path.exists(data_dir):
-            logger.error(f"Папка data не найдена: {data_dir}")
+            logger.error(f"Data folder not found: {data_dir}")
             return
 
         files = [f for f in os.listdir(data_dir) if os.path.isfile(os.path.join(data_dir, f))]
 
         if not files:
-            logger.warning("В папке data нет файлов для бэкапа")
+            logger.warning("No files for backup in data folder")
             return
 
         # Создаем сообщение-заголовок
@@ -724,7 +724,7 @@ async def send_backup_to_chat(context: CallbackContext, chat_id: int, test_mode:
                         caption=f"📄 {fname}"
                     )
             except Exception as e:
-                logger.error(f"Ошибка отправки файла {fname} в бэкап чат: {e}")
+                logger.error(f"Error sending file {fname} to backup chat: {e}")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"❌ Չհաջողվեց ուղարկել {fname}: {e}"
@@ -740,7 +740,7 @@ async def send_backup_to_chat(context: CallbackContext, chat_id: int, test_mode:
         logger.info(f"Backup sent to chat {chat_id}: {len(files)} files")
 
     except Exception as e:
-        logger.error(f"Ошибка при отправке бэкапа в чат {chat_id}: {e}", exc_info=True)
+        logger.error(f"Error sending backup to chat {chat_id}: {e}", exc_info=True)
         try:
             await context.bot.send_message(
                 chat_id=chat_id,
@@ -758,12 +758,12 @@ async def scheduled_backup_job(context: CallbackContext):
     from ...config.settings import BACKUP_CHAT_ID
 
     if not BACKUP_CHAT_ID:
-        logger.warning("BACKUP_CHAT_ID не установлен, пропускаем автоматический бэкап")
+        logger.warning("BACKUP_CHAT_ID not set, skipping automatic backup")
         return
 
-    logger.info(f"Запуск автоматического бэкапа в чат {BACKUP_CHAT_ID}")
+    logger.info(f"Starting automatic backup to chat {BACKUP_CHAT_ID}")
 
     try:
         await send_backup_to_chat(context, BACKUP_CHAT_ID, test_mode=False)
     except Exception as e:
-        logger.error(f"Ошибка при выполнении автоматического бэкапа: {e}", exc_info=True)
+        logger.error(f"Error during automatic backup execution: {e}", exc_info=True)

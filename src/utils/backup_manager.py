@@ -52,36 +52,36 @@ class BackupManager:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_name = f"backup_{timestamp}"
             backup_path = self.backup_dir / f"{backup_name}.zip"
-            
-            logger.info(f"Создание резервной копии: {backup_name}")
-            
+
+            logger.info(f"Creating backup: {backup_name}")
+
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # Добавляем базу данных
+                # Add database
                 if self.database_path.exists():
                     zip_file.write(self.database_path, "data/expenses.db")
-                    logger.info("База данных добавлена в резервную копию")
-                
-                # Добавляем файлы пользователей
+                    logger.info("Database added to backup")
+
+                # Add user files
                 for user_file in [self.users_path, self.allowed_users_path]:
                     if user_file.exists():
                         zip_file.write(user_file, f"data/{user_file.name}")
-                        logger.info(f"Файл {user_file.name} добавлен в резервную копию")
-                
-                # Добавляем конфигурацию
+                        logger.info(f"File {user_file.name} added to backup")
+
+                # Add configuration
                 if self.config_path.exists():
                     zip_file.write(self.config_path, "data/bot_config.json")
-                    logger.info("Конфигурация бота добавлена в резервную копию")
-                
-                # Добавляем локализацию
+                    logger.info("Bot configuration added to backup")
+
+                # Add localization
                 if self.localization_path.exists():
                     zip_file.write(self.localization_path, "src/config/localization.json")
-                    logger.info("Файл локализации добавлен в резервную копию")
-                
-                # Добавляем учетные данные (если есть)
+                    logger.info("Localization file added to backup")
+
+                # Add credentials (if any)
                 if self.credentials_dir.exists():
                     for cred_file in self.credentials_dir.glob("*.json"):
                         zip_file.write(cred_file, f"credentials/{cred_file.name}")
-                        logger.info(f"Файл учетных данных {cred_file.name} добавлен")
+                        logger.info(f"Credentials file {cred_file.name} added")
                 
                 # Создаем манифест резервной копии
                 manifest = {
@@ -112,11 +112,11 @@ class BackupManager:
                 "files_count": len(manifest["files"])
             }
             
-            logger.info(f"Резервная копия успешно создана: {backup_name}")
+            logger.info(f"Backup successfully created: {backup_name}")
             return backup_info
-            
+
         except Exception as e:
-            logger.error(f"Ошибка создания резервной копии: {e}")
+            logger.error(f"Error creating backup: {e}")
             raise
     
     def list_backups(self) -> List[Dict[str, any]]:
@@ -161,13 +161,13 @@ class BackupManager:
                     backups.append(backup_info)
                     
                 except Exception as e:
-                    logger.warning(f"Ошибка чтения информации о резервной копии {backup_file}: {e}")
-                    
-            # Сортируем по дате создания (новые первыми)
+                    logger.warning(f"Error reading backup info {backup_file}: {e}")
+
+            # Sort by creation date (newest first)
             backups.sort(key=lambda x: x["created_at"], reverse=True)
-            
+
         except Exception as e:
-            logger.error(f"Ошибка получения списка резервных копий: {e}")
+            logger.error(f"Error getting backup list: {e}")
             
         return backups
     
@@ -185,12 +185,12 @@ class BackupManager:
             backup_path = self.backup_dir / f"{backup_name}.zip"
             
             if not backup_path.exists():
-                raise FileNotFoundError(f"Резервная копия {backup_name} не найдена")
-            
-            logger.info(f"Начало восстановления из резервной копии: {backup_name}")
-            
-            # Создаем резервную копию текущего состояния перед восстановлением
-            current_backup = self.create_backup("Автоматический бэкап перед восстановлением")
+                raise FileNotFoundError(f"Backup {backup_name} not found")
+
+            logger.info(f"Starting restore from backup: {backup_name}")
+
+            # Create backup of current state before restore
+            current_backup = self.create_backup("Automatic backup before restore")
             
             restored_files = []
             
@@ -212,44 +212,44 @@ class BackupManager:
                     final_db_path = os.path.join(db_restore_dir, "expenses.db")
                     shutil.move(extracted_path, final_db_path)
                     restored_files.append(final_db_path)
-                    logger.info(f"База данных восстановлена в {final_db_path}")
-                
-                # Определяем путь для восстановления файлов
+                    logger.info(f"Database restored to {final_db_path}")
+
+                # Determine restore path for files
                 if os.environ.get('DEPLOY_MODE') == 'true':
                     restore_dir = '/app_data'
                 else:
                     restore_dir = 'data'
-                
-                # Восстанавливаем файлы пользователей
+
+                # Restore user files
                 user_files = ["users.json", "allowed_users.json", "bot_config.json"]
                 for user_file in user_files:
                     file_in_archive = f"data/{user_file}"
                     if file_in_archive in zip_file.namelist():
-                        # Извлекаем файл
+                        # Extract file
                         extracted_path = zip_file.extract(file_in_archive, ".")
-                        # Перемещаем в правильную директорию
+                        # Move to correct directory
                         final_path = os.path.join(restore_dir, user_file)
                         os.makedirs(restore_dir, exist_ok=True)
                         shutil.move(extracted_path, final_path)
                         restored_files.append(final_path)
-                        logger.info(f"Файл {final_path} восстановлен")
-                
-                # Восстанавливаем локализацию
+                        logger.info(f"File {final_path} restored")
+
+                # Restore localization
                 if "src/config/localization.json" in zip_file.namelist():
-                    # Создаем директорию если не существует
+                    # Create directory if it doesn't exist
                     self.localization_path.parent.mkdir(parents=True, exist_ok=True)
                     zip_file.extract("src/config/localization.json", ".")
                     restored_files.append("src/config/localization.json")
-                    logger.info("Файл локализации восстановлен")
-                
-                # Восстанавливаем учетные данные
+                    logger.info("Localization file restored")
+
+                # Restore credentials
                 for file_info in zip_file.infolist():
                     if file_info.filename.startswith("credentials/"):
-                        # Создаем директорию если не существует
+                        # Create directory if it doesn't exist
                         self.credentials_dir.mkdir(exist_ok=True)
                         zip_file.extract(file_info, ".")
                         restored_files.append(file_info.filename)
-                        logger.info(f"Файл учетных данных {file_info.filename} восстановлен")
+                        logger.info(f"Credentials file {file_info.filename} restored")
             
             restore_info = {
                 "backup_name": backup_name,
@@ -259,11 +259,11 @@ class BackupManager:
                 "current_backup": current_backup["name"]
             }
             
-            logger.info(f"Восстановление успешно завершено: {len(restored_files)} файлов")
+            logger.info(f"Restore completed successfully: {len(restored_files)} files")
             return restore_info
-            
+
         except Exception as e:
-            logger.error(f"Ошибка восстановления резервной копии: {e}")
+            logger.error(f"Error restoring backup: {e}")
             raise
     
     def delete_backup(self, backup_name: str) -> bool:
@@ -281,14 +281,14 @@ class BackupManager:
             
             if backup_path.exists():
                 backup_path.unlink()
-                logger.info(f"Резервная копия {backup_name} удалена")
+                logger.info(f"Backup {backup_name} deleted")
                 return True
             else:
-                logger.warning(f"Резервная копия {backup_name} не найдена")
+                logger.warning(f"Backup {backup_name} not found")
                 return False
-                
+
         except Exception as e:
-            logger.error(f"Ошибка удаления резервной копии {backup_name}: {e}")
+            logger.error(f"Error deleting backup {backup_name}: {e}")
             return False
     
     def cleanup_old_backups(self, keep_count: int = 10) -> Dict[str, any]:
@@ -309,7 +309,7 @@ class BackupManager:
                     "deleted_count": 0,
                     "kept_count": len(backups),
                     "freed_space": 0,
-                    "message": f"Нет резервных копий для удаления. Всего: {len(backups)}"
+                    "message": f"No backups to delete. Total: {len(backups)}"
                 }
             
             # Удаляем старые резервные копии
@@ -326,14 +326,14 @@ class BackupManager:
                 "deleted_count": deleted_count,
                 "kept_count": len(backups) - deleted_count,
                 "freed_space": freed_space,
-                "message": f"Удалено {deleted_count} старых резервных копий"
+                "message": f"Deleted {deleted_count} old backups"
             }
-            
-            logger.info(f"Очистка завершена: удалено {deleted_count} резервных копий")
+
+            logger.info(f"Cleanup completed: deleted {deleted_count} backups")
             return cleanup_info
-            
+
         except Exception as e:
-            logger.error(f"Ошибка очистки резервных копий: {e}")
+            logger.error(f"Error cleaning up backups: {e}")
             raise
     
     def cleanup_old_backups_by_age(self, max_age_days: int = 30) -> Dict[str, any]:
@@ -363,7 +363,7 @@ class BackupManager:
                     "deleted_count": 0,
                     "kept_count": len(backups),
                     "freed_space": 0,
-                    "message": f"Нет резервных копий старше {max_age_days} дней"
+                    "message": f"No backups older than {max_age_days} days"
                 }
             
             # Удаляем старые резервные копии
@@ -380,14 +380,14 @@ class BackupManager:
                 "kept_count": len(backups) - deleted_count,
                 "freed_space": freed_space,
                 "cutoff_date": cutoff_date.isoformat(),
-                "message": f"Удалено {deleted_count} резервных копий старше {max_age_days} дней"
+                "message": f"Deleted {deleted_count} backups older than {max_age_days} days"
             }
-            
-            logger.info(f"Очистка по возрасту завершена: удалено {deleted_count} копий старше {max_age_days} дней")
+
+            logger.info(f"Age-based cleanup completed: deleted {deleted_count} backups older than {max_age_days} days")
             return cleanup_info
-            
+
         except Exception as e:
-            logger.error(f"Ошибка очистки резервных копий по возрасту: {e}")
+            logger.error(f"Error cleaning up backups by age: {e}")
             raise
 
     def get_backup_statistics(self) -> Dict[str, any]:
@@ -425,7 +425,7 @@ class BackupManager:
             }
             
         except Exception as e:
-            logger.error(f"Ошибка получения статистики резервных копий: {e}")
+            logger.error(f"Error getting backup statistics: {e}")
             return {
                 "total_count": 0,
                 "total_size": 0,
@@ -486,7 +486,7 @@ class BackupManager:
             return backup_info
             
         except Exception as e:
-            logger.error(f"Ошибка получения информации о резервной копии {backup_name}: {e}")
+            logger.error(f"Error getting backup info {backup_name}: {e}")
             return None
     
     def verify_backup(self, backup_name: str) -> Dict[str, any]:
@@ -505,7 +505,7 @@ class BackupManager:
             if not backup_path.exists():
                 return {
                     "valid": False,
-                    "error": f"Резервная копия {backup_name} не найдена"
+                    "error": f"Backup {backup_name} not found"
                 }
             
             # Проверяем ZIP архив
@@ -516,7 +516,7 @@ class BackupManager:
                 if bad_files:
                     return {
                         "valid": False,
-                        "error": f"Поврежденные файлы в архиве: {bad_files}"
+                        "error": f"Corrupted files in archive: {bad_files}"
                     }
                 
                 files = zip_file.namelist()
@@ -535,7 +535,7 @@ class BackupManager:
         except Exception as e:
             return {
                 "valid": False,
-                "error": f"Ошибка проверки резервной копии: {e}"
+                "error": f"Error verifying backup: {e}"
             }
 
 # Глобальный экземпляр менеджера резервного копирования

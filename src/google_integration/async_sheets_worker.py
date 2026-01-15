@@ -51,7 +51,7 @@ class AsyncSheetsWorker:
             return
             
         self.running = True
-        logger.info(f"Запуск {self.max_workers} воркеров для Google Sheets")
+        logger.info(f"Starting {self.max_workers} workers for Google Sheets")
         
         for i in range(self.max_workers):
             worker = Thread(target=self._worker_loop, name=f"SheetsWorker-{i}", daemon=True)
@@ -61,7 +61,7 @@ class AsyncSheetsWorker:
     def stop(self):
         """Останавливает воркеры"""
         self.running = False
-        logger.info("Остановка воркеров Google Sheets")
+        logger.info("Stopping Google Sheets workers")
     
     def add_task(self, task: SheetsTask):
         """Добавляет задачу в очередь"""
@@ -75,18 +75,18 @@ class AsyncSheetsWorker:
         # Log the task that was added
         
         self.task_queue.put(task)
-        logger.debug(f"Добавлена задача {task.task_type.value} для {task.record_id}")
+        logger.debug(f"Task {task.task_type.value} added for {task.record_id}")
     
     def _worker_loop(self):
         """Основной цикл воркера"""
         worker_name = current_thread().name
-        logger.info(f"Воркер {worker_name} запущен")
+        logger.info(f"Worker {worker_name} started")
         
         while self.running:
             try:
                 # Получаем задачу с таймаутом
                 task = self.task_queue.get(timeout=1.0)
-                logger.debug(f"Воркер {worker_name} получил задачу {task.task_type.value}")
+                logger.debug(f"Worker {worker_name} received task {task.task_type.value}")
                 self._process_task(task)
                 self.task_queue.task_done()
             except Exception as e:
@@ -96,15 +96,15 @@ class AsyncSheetsWorker:
                     # Таймаут ожидания задачи - это нормально
                     continue
                 elif self.running:  # Игнорируем ошибки при остановке
-                    logger.error(f"Ошибка в воркере {worker_name}: {e}", exc_info=True)
+                    logger.error(f"Error in worker {worker_name}: {e}", exc_info=True)
                 time.sleep(0.1)
         
-        logger.info(f"Воркер {worker_name} остановлен")
+        logger.info(f"Worker {worker_name} stopped")
     
     def _process_task(self, task: SheetsTask):
         """Обрабатывает одну задачу"""
         try:
-            logger.debug(f"Обработка задачи {task.task_type.value} для {task.record_id}")
+            logger.debug(f"Processing task {task.task_type.value} for {task.record_id}")
             success = False
 
             if task.task_type == TaskType.ADD_RECORD:
@@ -153,22 +153,22 @@ class AsyncSheetsWorker:
                     role=task.data['role']
                 )
             else:
-                logger.error(f"Неизвестный тип задачи: {task.task_type}")
+                logger.error(f"Unknown task type: {task.task_type}")
                 return
             
             if success:
-                logger.info(f"Успешно выполнена задача {task.task_type.value} для {task.record_id}")
+                logger.info(f"Task {task.task_type.value} completed successfully for {task.record_id}")
                 if task.callback:
                     try:
                         task.callback(True, None)
                     except Exception as e:
-                        logger.error(f"Ошибка в callback: {e}", exc_info=True)
+                        logger.error(f"Error in callback: {e}", exc_info=True)
             else:
-                logger.warning(f"Неудачное выполнение задачи {task.task_type.value} для {task.record_id}")
+                logger.warning(f"Failed to execute task {task.task_type.value} for {task.record_id}")
                 self._handle_task_failure(task)
                 
         except Exception as e:
-            logger.error(f"Ошибка обработки задачи {task.task_type.value} для {task.record_id}: {e}", exc_info=True)
+            logger.error(f"Error processing task {task.task_type.value} for {task.record_id}: {e}", exc_info=True)
             self._handle_task_failure(task, str(e))
     
     def _handle_task_failure(self, task: SheetsTask, error: str = None):
@@ -176,19 +176,19 @@ class AsyncSheetsWorker:
         task.retry_count += 1
         
         if task.retry_count <= task.max_retries:
-            logger.warning(f"Повтор задачи {task.task_type.value} для {task.record_id} "
-                          f"(попытка {task.retry_count}/{task.max_retries})")
+            logger.warning(f"Retrying task {task.task_type.value} for {task.record_id} "
+                           f"(attempt {task.retry_count}/{task.max_retries})")
             # Добавляем задержку перед повтором
             time.sleep(min(2 ** task.retry_count, 10))  # Экспоненциальная задержка
             self.task_queue.put(task)
         else:
-            logger.error(f"Задача {task.task_type.value} для {task.record_id} не выполнена "
-                        f"после {task.max_retries} попыток")
+            logger.error(f"Task {task.task_type.value} for {task.record_id} not completed "
+                         f"after {task.max_retries} attempts")
             if task.callback:
                 try:
-                    task.callback(False, error or "Превышено количество попыток")
+                    task.callback(False, error or "Maximum attempts exceeded")
                 except Exception as e:
-                    logger.error(f"Ошибка в callback при неудаче: {e}")
+                    logger.error(f"Error in failure callback: {e}")
 
 
 # Глобальный экземпляр воркера
@@ -201,13 +201,13 @@ def add_record_async(spreadsheet_id: str, sheet_name: str, record: Dict,
     """Асинхронно добавляет запись в Google Sheets"""
     # Валидация входных данных
     if not spreadsheet_id or not sheet_name or not record:
-        logger.error(f"Неверные параметры для add_record_async: "
-                    f"spreadsheet_id={spreadsheet_id}, sheet_name={sheet_name}, "
-                    f"record={record}")
+        logger.error(f"Invalid parameters for add_record_async: "
+                     f"spreadsheet_id={spreadsheet_id}, sheet_name={sheet_name}, "
+                     f"record={record}")
         return
     
     if not record.get('id'):
-        logger.error(f"Запись без ID: {record}")
+        logger.error(f"Record without ID: {record}")
         return
     
     task = SheetsTask(
@@ -226,9 +226,9 @@ def update_record_async(spreadsheet_id: str, sheet_name: str, record_id: str,
     """Асинхронно обновляет запись в Google Sheets"""
     # Валидация входных данных
     if not spreadsheet_id or not sheet_name or not record_id or not field:
-        logger.error(f"Неверные параметры для update_record_async: "
-                    f"spreadsheet_id={spreadsheet_id}, sheet_name={sheet_name}, "
-                    f"record_id={record_id}, field={field}")
+        logger.error(f"Invalid parameters for update_record_async: "
+                     f"spreadsheet_id={spreadsheet_id}, sheet_name={sheet_name}, "
+                     f"record_id={record_id}, field={field}")
         return
     
     task = SheetsTask(
@@ -247,9 +247,9 @@ def delete_record_async(spreadsheet_id: str, sheet_name: str, record_id: str,
     """Асинхронно удаляет запись из Google Sheets"""
     # Валидация входных данных
     if not spreadsheet_id or not sheet_name or not record_id:
-        logger.error(f"Неверные параметры для delete_record_async: "
-                    f"spreadsheet_id={spreadsheet_id}, sheet_name={sheet_name}, "
-                    f"record_id={record_id}")
+        logger.error(f"Invalid parameters for delete_record_async: "
+                     f"spreadsheet_id={spreadsheet_id}, sheet_name={sheet_name}, "
+                     f"record_id={record_id}")
         return
     
     task = SheetsTask(
@@ -295,9 +295,9 @@ def add_payment_async(payment_id: int, user_display_name: str, amount: float,
     from ..config.settings import PAYMENTS_SPREADSHEET_ID
 
     if not PAYMENTS_SPREADSHEET_ID:
-        logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+        logger.error("PAYMENTS_SPREADSHEET_ID not set")
         if callback:
-            callback(False, "PAYMENTS_SPREADSHEET_ID не установлен")
+            callback(False, "PAYMENTS_SPREADSHEET_ID not set")
         return
 
     task = SheetsTask(
@@ -319,7 +319,7 @@ def add_payment_async(payment_id: int, user_display_name: str, amount: float,
         callback=callback
     )
     sheets_worker.add_task(task)
-    logger.info(f"Добавлена задача на запись платежа #{payment_id} в очередь")
+    logger.info(f"Task to add payment #{payment_id} added to queue")
 
 
 def delete_payment_async(payment_id: int, role: str, callback: Optional[callable] = None):
@@ -334,9 +334,9 @@ def delete_payment_async(payment_id: int, role: str, callback: Optional[callable
     from ..config.settings import PAYMENTS_SPREADSHEET_ID
 
     if not PAYMENTS_SPREADSHEET_ID:
-        logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+        logger.error("PAYMENTS_SPREADSHEET_ID not set")
         if callback:
-            callback(False, "PAYMENTS_SPREADSHEET_ID не установлен")
+            callback(False, "PAYMENTS_SPREADSHEET_ID not set")
         return
 
     task = SheetsTask(
@@ -348,7 +348,7 @@ def delete_payment_async(payment_id: int, role: str, callback: Optional[callable
         callback=callback
     )
     sheets_worker.add_task(task)
-    logger.info(f"Добавлена задача на удаление платежа #{payment_id} в очередь")
+    logger.info(f"Task to delete payment #{payment_id} added to queue")
 
 
 def update_payment_async(payment_id: int, role: str, updated_data: Dict,
@@ -365,9 +365,9 @@ def update_payment_async(payment_id: int, role: str, updated_data: Dict,
     from ..config.settings import PAYMENTS_SPREADSHEET_ID
 
     if not PAYMENTS_SPREADSHEET_ID:
-        logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+        logger.error("PAYMENTS_SPREADSHEET_ID not set")
         if callback:
-            callback(False, "PAYMENTS_SPREADSHEET_ID не установлен")
+            callback(False, "PAYMENTS_SPREADSHEET_ID not set")
         return
 
     task = SheetsTask(
@@ -382,4 +382,4 @@ def update_payment_async(payment_id: int, role: str, updated_data: Dict,
         callback=callback
     )
     sheets_worker.add_task(task)
-    logger.info(f"Добавлена задача на обновление платежа #{payment_id} в очередь")
+    logger.info(f"Task to update payment #{payment_id} added to queue")

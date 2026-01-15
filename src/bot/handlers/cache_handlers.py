@@ -83,10 +83,10 @@ async def show_cache_stats(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка при получении статистики кеша: {e}")
+        logger.error(f"Error in cash stats receiveing: {e}")
         await query.edit_message_text(
-            f"❌ Ошибка при получении статистики: {e}",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="cache_management")]])
+            f"❌ Error in cash stats receiveing: {e}",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Հետ", callback_data="cache_management")]])
         )
 
 async def refresh_spreadsheets_cache(update: Update, context: CallbackContext):
@@ -97,7 +97,7 @@ async def refresh_spreadsheets_cache(update: Update, context: CallbackContext):
     # Проверяем права админа
     if user_id not in ADMIN_IDS:
         await query.edit_message_text(
-            "❌ Доступ запрещен",
+            "❌ Մութքը արգելված է",
             reply_markup=create_back_to_menu_keyboard()
         )
         return
@@ -122,9 +122,9 @@ async def refresh_spreadsheets_cache(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка при обновлении кеша: {e}")
+        logger.error(f"Error in cash updating: {e}")
         await query.edit_message_text(
-            f"❌ Ошибка при обновлении кеша: {e}",
+            f"❌ Error in cash updating: {e}",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="cache_management")]])
         )
 
@@ -157,8 +157,8 @@ async def clear_cache(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка при очистке кеша: {e}")
+        logger.error(f"Error in cash cleaning: {e}")
         await query.edit_message_text(
-            f"❌ Ошибка при очистке кеша: {e}",
+            f"❌ Error in cash cleaning: {e}",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="cache_management")]])
         )

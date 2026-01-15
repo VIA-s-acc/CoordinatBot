@@ -40,7 +40,7 @@ class PaymentsSheetsManager:
         self.spreadsheet_id = PAYMENTS_SPREADSHEET_ID
 
         if not self.spreadsheet_id:
-            logger.warning("PAYMENTS_SPREADSHEET_ID не установлен в переменных окружения")
+            logger.warning("PAYMENTS_SPREADSHEET_ID not set in environment variables")
 
     def initialize_payment_sheets(self) -> bool:
         """
@@ -48,16 +48,16 @@ class PaymentsSheetsManager:
         Вызывается при старте бота
         """
         if not self.spreadsheet_id:
-            logger.error("Не указан PAYMENTS_SPREADSHEET_ID")
+            logger.error("PAYMENTS_SPREADSHEET_ID not specified")
             return False
 
         try:
-            logger.info(f"Инициализация таблицы платежей: {self.spreadsheet_id}")
+            logger.info(f"Initializing payments table: {self.spreadsheet_id}")
 
             # Получаем доступ к таблице
             spreadsheet = self.sheets_manager.open_sheet_by_id(self.spreadsheet_id)
             if not spreadsheet:
-                logger.error(f"Не удалось открыть таблицу платежей: {self.spreadsheet_id}")
+                logger.error(f"Failed to open payments table: {self.spreadsheet_id}")
                 return False
 
             # Получаем список существующих листов
@@ -70,18 +70,18 @@ class PaymentsSheetsManager:
                     sheets_to_create.append((role, sheet_name))
 
             if sheets_to_create:
-                logger.info(f"Создаем {len(sheets_to_create)} новых листов...")
+                logger.info(f"Creating {len(sheets_to_create)} new sheets...")
                 for role, sheet_name in sheets_to_create:
-                    logger.info(f"  - {sheet_name} (роль: {role})")
+                    logger.info(f"  - {sheet_name} (role: {role})")
                     self._create_payment_sheet(spreadsheet, sheet_name)
             else:
-                logger.info("Все необходимые листы уже существуют")
+                logger.info("All necessary sheets already exist")
 
-            logger.info("✅ Инициализация таблицы платежей завершена")
+            logger.info("Payments table initialization completed")
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка при инициализации таблицы платежей: {e}", exc_info=True)
+            logger.error(f"Error initializing payments table: {e}", exc_info=True)
             return False
 
     def _create_payment_sheet(self, spreadsheet, sheet_name: str):
@@ -102,10 +102,10 @@ class PaymentsSheetsManager:
             # Замораживаем первую строку
             worksheet.freeze(rows=1)
 
-            logger.info(f"✅ Создан лист: {sheet_name}")
+            logger.info(f"Sheet created: {sheet_name}")
 
         except Exception as e:
-            logger.error(f"Ошибка при создании листа {sheet_name}: {e}", exc_info=True)
+            logger.error(f"Error creating sheet {sheet_name}: {e}", exc_info=True)
             raise
 
     def _ensure_headers(self, spreadsheet, sheet_name: str):
@@ -117,7 +117,7 @@ class PaymentsSheetsManager:
             first_row = worksheet.row_values(1)
 
             if not first_row or first_row != self.HEADERS:
-                logger.info(f"Обновляем заголовки в листе {sheet_name}")
+                logger.info(f"Updating headers in sheet {sheet_name}")
                 worksheet.insert_row(self.HEADERS, index=1)
 
                 # Форматируем заголовки
@@ -127,7 +127,7 @@ class PaymentsSheetsManager:
                 })
 
         except Exception as e:
-            logger.error(f"Ошибка при проверке заголовков в {sheet_name}: {e}")
+            logger.error(f"Error checking headers in {sheet_name}: {e}")
 
     def get_sheet_name_for_role(self, role: str) -> Optional[str]:
         """Возвращает название листа для указанной роли"""
@@ -163,20 +163,20 @@ class PaymentsSheetsManager:
             True если успешно, False если ошибка
         """
         if not self.spreadsheet_id:
-            logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+            logger.error("PAYMENTS_SPREADSHEET_ID not set")
             return False
 
         try:
             # Получаем название листа для роли
             sheet_name = self.get_sheet_name_for_role(role)
             if not sheet_name:
-                logger.error(f"Не найден лист для роли: {role}")
+                logger.error(f"Sheet not found for role: {role}")
                 return False
 
             # Открываем таблицу и лист
             spreadsheet = self.sheets_manager.open_sheet_by_id(self.spreadsheet_id)
             if not spreadsheet:
-                logger.error(f"Не удалось открыть таблицу: {self.spreadsheet_id}")
+                logger.error(f"Failed to open table: {self.spreadsheet_id}")
                 return False
 
             worksheet = spreadsheet.worksheet(sheet_name)
@@ -184,7 +184,7 @@ class PaymentsSheetsManager:
             # Проверяем, существует ли уже платеж с таким ID
             id_column = worksheet.col_values(1)  # Первая колонка - ID
             if str(payment_id) in id_column:
-                logger.info(f"Платеж #{payment_id} уже существует в листе '{sheet_name}', пропускаем")
+                logger.info(f"Payment #{payment_id} already exists in sheet '{sheet_name}', skipping")
                 return True  # Возвращаем True, т.к. это не ошибка
 
             # Подготавливаем данные для записи
@@ -206,13 +206,13 @@ class PaymentsSheetsManager:
             worksheet.append_row(row_data)
 
             logger.info(
-                f"✅ Платеж #{payment_id} добавлен в лист '{sheet_name}' "
-                f"(получатель: {user_display_name}, сумма: {amount})"
+                f"Payment #{payment_id} added to sheet '{sheet_name}' "
+                f"(recipient: {user_display_name}, amount: {amount})"
             )
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка при добавлении платежа в таблицу: {e}", exc_info=True)
+            logger.error(f"Error adding payment to table: {e}", exc_info=True)
             return False
 
     def add_payments_batch(self, payments: List[Dict], role: str) -> bool:
@@ -236,24 +236,24 @@ class PaymentsSheetsManager:
             True если успешно, False если ошибка
         """
         if not self.spreadsheet_id:
-            logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+            logger.error("PAYMENTS_SPREADSHEET_ID not set")
             return False
 
         if not payments:
-            logger.info("Нет платежей для пакетной вставки")
+            logger.info("No payments for batch insertion")
             return True
 
         try:
             # Получаем название листа для роли
             sheet_name = self.get_sheet_name_for_role(role)
             if not sheet_name:
-                logger.error(f"Не найден лист для роли: {role}")
+                logger.error(f"Sheet not found for role: {role}")
                 return False
 
             # Открываем таблицу и лист
             spreadsheet = self.sheets_manager.open_sheet_by_id(self.spreadsheet_id)
             if not spreadsheet:
-                logger.error(f"Не удалось открыть таблицу: {self.spreadsheet_id}")
+                logger.error(f"Failed to open table: {self.spreadsheet_id}")
                 return False
 
             worksheet = spreadsheet.worksheet(sheet_name)
@@ -289,17 +289,17 @@ class PaymentsSheetsManager:
             if rows_data:
                 worksheet.append_rows(rows_data)
                 logger.info(
-                    f"✅ Пакетная вставка: {len(rows_data)} платежей добавлено в лист '{sheet_name}'"
-                    f"{f', пропущено {skipped_count} дубликатов' if skipped_count else ''}"
+                    f"Batch insertion: {len(rows_data)} payments added to sheet '{sheet_name}'"
+                    f"{f', {skipped_count} duplicates skipped' if skipped_count else ''}"
                 )
             else:
                 logger.info(
-                    f"Все {len(payments)} платежей уже существуют в листе '{sheet_name}', пропускаем"
+                    f"All {len(payments)} payments already exist in sheet '{sheet_name}', skipping"
                 )
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка при пакетной вставке платежей: {e}", exc_info=True)
+            logger.error(f"Error in batch payment insertion: {e}", exc_info=True)
             return False
 
     def get_payments_from_sheet(self, role: str) -> List[Dict]:
@@ -310,18 +310,18 @@ class PaymentsSheetsManager:
             Список словарей с данными платежей
         """
         if not self.spreadsheet_id:
-            logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+            logger.error("PAYMENTS_SPREADSHEET_ID not set")
             return []
 
         try:
             sheet_name = self.get_sheet_name_for_role(role)
             if not sheet_name:
-                logger.error(f"Не найден лист для роли: {role}")
+                logger.error(f"Sheet not found for role: {role}")
                 return []
 
             spreadsheet = self.sheets_manager.open_sheet_by_id(self.spreadsheet_id)
             if not spreadsheet:
-                logger.error(f"Не удалось открыть таблицу: {self.spreadsheet_id}")
+                logger.error(f"Failed to open table: {self.spreadsheet_id}")
                 return []
 
             worksheet = spreadsheet.worksheet(sheet_name)
@@ -349,11 +349,11 @@ class PaymentsSheetsManager:
                 }
                 payments.append(payment)
 
-            logger.info(f"Загружено {len(payments)} платежей из листа '{sheet_name}'")
+            logger.info(f"Loaded {len(payments)} payments from sheet '{sheet_name}'")
             return payments
 
         except Exception as e:
-            logger.error(f"Ошибка при загрузке платежей из таблицы: {e}", exc_info=True)
+            logger.error(f"Error loading payments from table: {e}", exc_info=True)
             return []
 
     def get_all_payments_from_sheets(self) -> List[Dict]:
@@ -372,7 +372,7 @@ class PaymentsSheetsManager:
                 payment['role'] = role
             all_payments.extend(payments)
 
-        logger.info(f"Загружено всего {len(all_payments)} платежей из всех листов")
+        logger.info(f"Loaded total {len(all_payments)} payments from all sheets")
         return all_payments
 
     def update_payment_in_sheet(
@@ -394,13 +394,13 @@ class PaymentsSheetsManager:
             True если успешно
         """
         if not self.spreadsheet_id:
-            logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+            logger.error("PAYMENTS_SPREADSHEET_ID not set")
             return False
 
         try:
             sheet_name = self.get_sheet_name_for_role(role)
             if not sheet_name:
-                logger.error(f"Не найден лист для роли: {role}")
+                logger.error(f"Sheet not found for role: {role}")
                 return False
 
             spreadsheet = self.sheets_manager.open_sheet_by_id(self.spreadsheet_id)
@@ -415,7 +415,7 @@ class PaymentsSheetsManager:
             try:
                 row_index = id_column.index(str(payment_id)) + 1  # +1 т.к. индексация с 1
             except ValueError:
-                logger.warning(f"Платеж #{payment_id} не найден в листе '{sheet_name}'")
+                logger.warning(f"Payment #{payment_id} not found in sheet '{sheet_name}'")
                 return False
 
             # Обновляем данные в соответствующих ячейках
@@ -453,14 +453,14 @@ class PaymentsSheetsManager:
             # Выполняем пакетное обновление
             if updates:
                 worksheet.batch_update(updates)
-                logger.info(f"✅ Платеж #{payment_id} обновлен в листе '{sheet_name}' (обновлено полей: {len(updates)})")
+                logger.info(f"Payment #{payment_id} updated in sheet '{sheet_name}' (fields updated: {len(updates)})")
             else:
-                logger.warning(f"Нет данных для обновления платежа #{payment_id}")
+                logger.warning(f"No data to update for payment #{payment_id}")
 
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка при обновлении платежа в таблице: {e}", exc_info=True)
+            logger.error(f"Error updating payment in table: {e}", exc_info=True)
             return False
 
     def delete_payment_from_sheet(self, payment_id: int, role: str) -> bool:
@@ -475,13 +475,13 @@ class PaymentsSheetsManager:
             True если успешно
         """
         if not self.spreadsheet_id:
-            logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+            logger.error("PAYMENTS_SPREADSHEET_ID not set")
             return False
 
         try:
             sheet_name = self.get_sheet_name_for_role(role)
             if not sheet_name:
-                logger.error(f"Не найден лист для роли: {role}")
+                logger.error(f"Sheet not found for role: {role}")
                 return False
 
             spreadsheet = self.sheets_manager.open_sheet_by_id(self.spreadsheet_id)
@@ -496,12 +496,12 @@ class PaymentsSheetsManager:
             try:
                 row_index = id_column.index(str(payment_id)) + 1
                 worksheet.delete_rows(row_index)
-                logger.info(f"✅ Платеж #{payment_id} удален из листа '{sheet_name}'")
+                logger.info(f"Payment #{payment_id} deleted from sheet '{sheet_name}'")
                 return True
             except ValueError:
-                logger.warning(f"Платеж #{payment_id} не найден в листе '{sheet_name}'")
+                logger.warning(f"Payment #{payment_id} not found in sheet '{sheet_name}'")
                 return False
 
         except Exception as e:
-            logger.error(f"Ошибка при удалении платежа из таблицы: {e}", exc_info=True)
+            logger.error(f"Error deleting payment from table: {e}", exc_info=True)
             return False

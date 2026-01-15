@@ -10,8 +10,8 @@ from ...utils.config_utils import send_to_log_chat
 from ...config.settings import logger
 
 async def error_handler(update: object, context: CallbackContext) -> None:
-    """Обрабатывает ошибки"""
-    logger.error(f"Բացառություն թարմացումը մշակելիս: {context.error}")
+    """Handles errors"""
+    logger.error(f"Exception processing update: {context.error}")
     logger.error(traceback.format_exc())
     
     # Отправляем ошибку в лог-чат
@@ -32,4 +32,4 @@ async def error_handler(update: object, context: CallbackContext) -> None:
                         show_alert=True
                     )
             except Exception as e:
-                logger.error(f"Չհաջողվեց ուղարկել սխալի հաղորդագրությունը օգտագործողին: {e}")
+                logger.error(f"Failed to send error message to user: {e}")

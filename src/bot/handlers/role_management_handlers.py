@@ -1,18 +1,16 @@
 """
 Обработчики для управления ролями пользователей (только для супер-админа)
 """
-import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from ...config.settings import UserRole
+from ...config.settings import UserRole, logger
 from ...utils.config_utils import (
     is_super_admin, get_user_role, set_user_role, get_users_by_role,
     get_user_display_name, get_role_display_name, add_allowed_user,
     remove_allowed_user, load_users, is_user_allowed
 )
 
-logger = logging.getLogger(__name__)
 
 # Conversation states
 SELECT_USER_ACTION, SELECT_ROLE, INPUT_USER_ID, INPUT_DISPLAY_NAME = range(4)

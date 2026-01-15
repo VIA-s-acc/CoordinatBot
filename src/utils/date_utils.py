@@ -125,7 +125,7 @@ def safe_parse_date(date_str: str) -> datetime.date:
             elif parsed_date.year < 100:
                 parsed_date = parsed_date.replace(year=parsed_date.year + 1900)
                 
-            logger.debug(f"Успешно распарсили дату '{date_str}' как {parsed_date} с форматом {fmt}")
+            logger.debug(f"Successfully parsed date '{date_str}' as {parsed_date} with format {fmt}")
             return parsed_date
         except ValueError:
             continue
@@ -147,5 +147,5 @@ def safe_parse_date_or_none(date_str: str) -> datetime.date:
     try:
         return safe_parse_date(date_str)
     except Exception as e:
-        logger.warning(f"Не удалось распарсить дату '{date_str}': {e}")
+        logger.warning(f"Failed to parse date '{date_str}': {e}")
         return None

@@ -2,12 +2,10 @@
 Модуль для работы с базой данных
 """
 import sqlite3
-import logging
 from datetime import datetime
 from typing import Dict, Optional, List, Tuple
-from ..config.settings import DATABASE_PATH
+from ..config.settings import DATABASE_PATH, logger
 
-logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     """Класс для управления базой данных"""
@@ -57,15 +55,15 @@ class DatabaseManager:
             columns = [row[1] for row in cursor.fetchall()]
             if "user_id" not in columns:
                 cursor.execute("ALTER TABLE records ADD COLUMN user_id INTEGER")
-                logger.info("Миграция: добавлен столбец user_id в таблицу records")
+                logger.info("Migration: added user_id column to records table")
 
             conn.commit()
             conn.close()
-            logger.info("База данных инициализирована и миграция выполнена успешно")
+            logger.info("Database initialized and migration completed successfully")
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка инициализации/миграции базы данных: {e}")
+            logger.error(f"Error initializing/migrating database: {e}")
             return False
 
     def add_record(self, record: Dict) -> bool:
@@ -93,11 +91,11 @@ class DatabaseManager:
 
             conn.commit()
             conn.close()
-            logger.info(f"Запись {record.get('id')} добавлена в БД")
+            logger.info(f"Record {record.get('id')} added to DB")
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка добавления записи в БД: {e}")
+            logger.error(f"Error adding record to DB: {e}")
             return False
 
     def update_record(self, record_id: str, field: str, new_value) -> bool:
@@ -108,7 +106,7 @@ class DatabaseManager:
             
             allowed_fields = ['date', 'supplier', 'direction', 'description', 'amount']
             if field not in allowed_fields:
-                logger.error(f"Недопустимое поле для обновления: {field}")
+                logger.error(f"Invalid field for update: {field}")
                 return False
             
             cursor.execute(f'''
@@ -119,11 +117,11 @@ class DatabaseManager:
             
             conn.commit()
             conn.close()
-            logger.info(f"Запись {record_id} обновлена: {field} = {new_value}")
+            logger.info(f"Record {record_id} updated: {field} = {new_value}")
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка обновления записи в БД: {e}")
+            logger.error(f"Error updating record in DB: {e}")
             return False
 
     def delete_record(self, record_id: str) -> bool:
@@ -136,11 +134,11 @@ class DatabaseManager:
             
             conn.commit()
             conn.close()
-            logger.info(f"Запись {record_id} удалена из БД")
+            logger.info(f"Record {record_id} deleted from DB")
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка удаления записи из БД: {e}")
+            logger.error(f"Error deleting record from DB: {e}")
             return False
 
     def get_record(self, record_id: str) -> Optional[Dict]:
@@ -160,7 +158,7 @@ class DatabaseManager:
             return None
 
         except Exception as e:
-            logger.error(f"Ошибка получения записи из БД: {e}")
+            logger.error(f"Error getting record from DB: {e}")
             return None
 
     def get_all_records(self, limit: Optional[int] = None) -> List[Dict]:
@@ -186,7 +184,7 @@ class DatabaseManager:
             return records
 
         except Exception as e:
-            logger.error(f"Ошибка получения записей из БД: {e}")
+            logger.error(f"Error getting records from DB: {e}")
             return []
 
     def search_records(self, query: str) -> List[Dict]:
@@ -215,7 +213,7 @@ class DatabaseManager:
             return records
 
         except Exception as e:
-            logger.error(f"Ошибка поиска записей в БД: {e}")
+            logger.error(f"Error searching records in DB: {e}")
             return []
 
     def get_db_stats(self) -> Optional[Dict]:
@@ -235,7 +233,7 @@ class DatabaseManager:
             }
 
         except Exception as e:
-            logger.error(f"Ошибка получения статистики БД: {e}")
+            logger.error(f"Error getting DB statistics: {e}")
             return None
 
     def backup_to_dict(self) -> Optional[Dict]:
@@ -251,7 +249,7 @@ class DatabaseManager:
             }
 
         except Exception as e:
-            logger.error(f"Ошибка создания резервной копии: {e}")
+            logger.error(f"Error creating backup: {e}")
             return None
 
     def get_user_id_by_record_id(self, record_id: str) -> Optional[int]:
@@ -268,7 +266,7 @@ class DatabaseManager:
             return result[0] if result else None
 
         except Exception as e:
-            logger.error(f"Ошибка получения user_id для записи {record_id}: {e}")
+            logger.error(f"Error getting user_id for record {record_id}: {e}")
             return None
 
     # Методы для работы с платежами
@@ -297,11 +295,11 @@ class DatabaseManager:
             payment_id = cursor.lastrowid
             conn.commit()
             conn.close()
-            logger.info(f"Платеж #{payment_id} добавлен: {amount} для {user_display_name}")
+            logger.info(f"Payment #{payment_id} added: {amount} for {user_display_name}")
             return payment_id
 
         except Exception as e:
-            logger.error(f"Ошибка добавления платежа: {e}")
+            logger.error(f"Error adding payment: {e}")
             return 0
 
     def add_payments_batch(self, payments: List[Dict]) -> int:
@@ -345,11 +343,11 @@ class DatabaseManager:
             conn.commit()
             conn.close()
 
-            logger.info(f"Групповая вставка платежей: добавлено {inserted} записей")
+            logger.info(f"Batch payment insertion: {inserted} records added")
             return inserted
 
         except Exception as e:
-            logger.error(f"Ошибка групповой вставки платежей: {e}")
+            logger.error(f"Error in batch payment insertion: {e}")
             return 0
 
     def get_payments(self, user_display_name: str = None, spreadsheet_id: str = None,
@@ -398,7 +396,7 @@ class DatabaseManager:
             return result
 
         except Exception as e:
-            logger.error(f"Ошибка получения платежей: {e}")
+            logger.error(f"Error getting payments: {e}")
             return []
 
     def delete_payment(self, payment_id: int) -> bool:
@@ -422,14 +420,14 @@ class DatabaseManager:
             conn.close()
 
             if deleted:
-                logger.info(f"Платеж #{payment_id} удален из БД")
+                logger.info(f"Payment #{payment_id} deleted from DB")
             else:
-                logger.warning(f"Платеж #{payment_id} не найден в БД")
+                logger.warning(f"Payment #{payment_id} not found in DB")
 
             return deleted
 
         except Exception as e:
-            logger.error(f"Ошибка удаления платежа #{payment_id}: {e}")
+            logger.error(f"Error deleting payment #{payment_id}: {e}")
             return False
 
     def update_payment(self, payment_id: int, amount: float = None,
@@ -470,7 +468,7 @@ class DatabaseManager:
                 params.append(comment)
 
             if not updates:
-                logger.warning(f"Нечего обновлять для платежа #{payment_id}")
+                logger.warning(f"Nothing to update for payment #{payment_id}")
                 conn.close()
                 return False
 
@@ -484,14 +482,14 @@ class DatabaseManager:
             conn.close()
 
             if updated:
-                logger.info(f"Платеж #{payment_id} обновлен в БД")
+                logger.info(f"Payment #{payment_id} updated in DB")
             else:
-                logger.warning(f"Платеж #{payment_id} не найден в БД")
+                logger.warning(f"Payment #{payment_id} not found in DB")
 
             return updated
 
         except Exception as e:
-            logger.error(f"Ошибка обновления платежа #{payment_id}: {e}")
+            logger.error(f"Error updating payment #{payment_id}: {e}")
             return False
 
     def get_records_by_period(self, start_date: str, end_date: str) -> List[Dict]:
@@ -518,7 +516,7 @@ class DatabaseManager:
             return records
 
         except Exception as e:
-            logger.error(f"Ошибка получения записей за период: {e}")
+            logger.error(f"Error getting records for period: {e}")
             return []
 
     def remove_duplicate_records(self) -> int:
@@ -536,7 +534,7 @@ class DatabaseManager:
             ''')
             
             duplicates = cursor.fetchall()
-            logger.info(f"Найдено {len(duplicates)} дублированных ID")
+            logger.info(f"Found {len(duplicates)} duplicated IDs")
             
             removed_count = 0
             
@@ -558,16 +556,16 @@ class DatabaseManager:
                     for rowid in rows_to_delete:
                         cursor.execute('DELETE FROM records WHERE rowid = ?', (rowid,))
                         removed_count += 1
-                        logger.info(f"Удален дубликат записи {record_id}, rowid={rowid}")
+                        logger.info(f"Deleted duplicate record {record_id}, rowid={rowid}")
             
             conn.commit()
             conn.close()
             
-            logger.info(f"Удалено {removed_count} дублированных записей")
+            logger.info(f"Deleted {removed_count} duplicate records")
             return removed_count
 
         except Exception as e:
-            logger.error(f"Ошибка удаления дублированных записей: {e}")
+            logger.error(f"Error deleting duplicate records: {e}")
             return 0
 
 # Создаем глобальный экземпляр менеджера базы данных
@@ -640,9 +638,9 @@ def add_payment(user_display_name: str, spreadsheet_id: str = None,
                 target_spreadsheet_id=spreadsheet_id,
                 target_sheet_name=sheet_name
             )
-            logger.info(f"Платеж #{payment_id} добавлен в очередь для синхронизации с Google Sheets (роль: {role})")
+            logger.info(f"Payment #{payment_id} added to queue for synchronization with Google Sheets (role: {role})")
         except Exception as e:
-            logger.error(f"Ошибка постановки задачи синхронизации платежа #{payment_id}: {e}")
+            logger.error(f"Error queuing payment synchronization task #{payment_id}: {e}")
 
     return payment_id
 
@@ -698,12 +696,12 @@ def delete_payment(payment_id: int) -> bool:
         if success and role:
             # Добавляем задачу на удаление из Google Sheets
             delete_payment_async(payment_id=payment_id, role=role)
-            logger.info(f"Платеж #{payment_id} добавлен в очередь для удаления из Google Sheets (роль: {role})")
+            logger.info(f"Payment #{payment_id} added to queue for deletion from Google Sheets (role: {role})")
 
         return success
 
     except Exception as e:
-        logger.error(f"Ошибка при удалении платежа #{payment_id}: {e}")
+        logger.error(f"Error deleting payment #{payment_id}: {e}")
         return False
 
 def update_payment(payment_id: int, amount: float = None,
@@ -730,7 +728,7 @@ def update_payment(payment_id: int, amount: float = None,
         payment = next((p for p in all_payments if p['id'] == payment_id), None)
 
         if not payment:
-            logger.error(f"Платеж #{payment_id} не найден")
+            logger.error(f"Payment #{payment_id} not found")
             return False
 
         # Определяем роль по display_name
@@ -753,12 +751,12 @@ def update_payment(payment_id: int, amount: float = None,
 
             # Добавляем задачу на обновление в Google Sheets
             update_payment_async(payment_id=payment_id, role=role, updated_data=updated_data)
-            logger.info(f"Платеж #{payment_id} обновлен и добавлен в очередь для синхронизации с Google Sheets (роль: {role})")
+            logger.info(f"Payment #{payment_id} updated and added to queue for synchronization with Google Sheets (role: {role})")
 
         return success
 
     except Exception as e:
-        logger.error(f"Ошибка при обновлении платежа #{payment_id}: {e}")
+        logger.error(f"Error updating payment #{payment_id}: {e}")
         return False
 
 def get_records_by_period(start_date: str, end_date: str) -> List[Dict]:

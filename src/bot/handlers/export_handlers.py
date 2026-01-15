@@ -1,7 +1,6 @@
 """
 Система экспорта и резервных копий
 """
-import logging
 import json
 from datetime import datetime
 from io import BytesIO
@@ -9,11 +8,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 import pandas as pd
 
-from ...config.settings import ADMIN_IDS
+from ...config.settings import ADMIN_IDS, logger
 from ...utils.config_utils import load_users
 from ...database.database_manager import get_all_records, get_payments
 
-logger = logging.getLogger(__name__)
 
 async def export_menu(update: Update, context: CallbackContext):
     """Меню экспорта данных"""
@@ -75,7 +73,7 @@ async def export_all_records(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка экспорта записей: {e}")
+        logger.error(f"Error exporting records: {e}")
         await query.answer("❌ Ошибка экспорта")
 
 async def export_all_payments(update: Update, context: CallbackContext):
@@ -136,7 +134,7 @@ async def export_all_payments(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка экспорта платежей: {e}")
+        logger.error(f"Error exporting payments: {e}")
         await query.answer("❌ Ошибка экспорта")
 
 async def export_users_data(update: Update, context: CallbackContext):
@@ -188,7 +186,7 @@ async def export_users_data(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка экспорта пользователей: {e}")
+        logger.error(f"Error exporting users: {e}")
         await query.answer("❌ Ошибка экспорта")
 
 async def export_full_backup(update: Update, context: CallbackContext):
@@ -298,7 +296,7 @@ async def export_full_backup(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка создания полного бэкапа: {e}")
+        logger.error(f"Error creating full backup: {e}")
         await query.answer("❌ Ошибка создания бэкапа")
 
 async def schedule_automated_backup(context: CallbackContext):
@@ -332,10 +330,10 @@ async def schedule_automated_backup(context: CallbackContext):
                 )
                 buffer.seek(0)  # Сбрасываем позицию для следующей отправки
             except Exception as e:
-                logger.error(f"Ошибка отправки автобэкапа админу {admin_id}: {e}")
+                logger.error(f"Error sending auto-backup to admin {admin_id}: {e}")
                 
     except Exception as e:
-        logger.error(f"Ошибка создания автоматического бэкапа: {e}")
+        logger.error(f"Error creating automatic backup: {e}")
 
 async def cleanup_old_data(update: Update, context: CallbackContext):
     """Меню очистки старых данных"""

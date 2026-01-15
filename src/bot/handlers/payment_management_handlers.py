@@ -420,7 +420,7 @@ async def payment_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         payment_id = int(query.data.replace("payment_detail_", ""))
     except ValueError:
-        logger.error(f"Неверный формат callback_data: {query.data}")
+        logger.error(f"Invalid callback_data format: {query.data}")
         await query.edit_message_text("❌ Սխալ տվյալներ:")
         return
 
@@ -429,7 +429,7 @@ async def payment_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payment = next((p for p in all_payments if p['id'] == payment_id), None)
 
     if not payment:
-        logger.warning(f"Платеж #{payment_id} не найден в БД (всего платежей: {len(all_payments)})")
+        logger.warning(f"Payment #{payment_id} not found in DB (total payments: {len(all_payments)})")
 
         # Получаем контекст для возврата
         payment_context = context.user_data.get('payment_list_context')
@@ -509,7 +509,7 @@ async def start_edit_payment_amount(update: Update, context: ContextTypes.DEFAUL
     try:
         payment_id = int(query.data.replace("payment_edit_amount_", ""))
     except ValueError:
-        logger.error(f"Неверный формат callback для редактирования: {query.data}")
+        logger.error(f"Invalid callback format for editing: {query.data}")
         await query.edit_message_text("❌ Սխալ տվյալներ:")
         return ConversationHandler.END
 
@@ -518,7 +518,7 @@ async def start_edit_payment_amount(update: Update, context: ContextTypes.DEFAUL
     payment = next((p for p in all_payments if p['id'] == payment_id), None)
 
     if not payment:
-        logger.warning(f"Попытка редактировать несуществующий платеж #{payment_id}")
+        logger.warning(f"Attempt to edit non-existent payment #{payment_id}")
         await query.edit_message_text(
             f"❌ Վճարումը #{payment_id} չի գտնվել:\n\n"
             "Հնարավոր է այն արդեն ջնջվել է:",
@@ -529,7 +529,7 @@ async def start_edit_payment_amount(update: Update, context: ContextTypes.DEFAUL
         return ConversationHandler.END
 
     context.user_data['editing_payment_id'] = payment_id
-    logger.info(f"Начато редактирование суммы платежа #{payment_id}")
+    logger.info(f"Started editing payment amount #{payment_id}")
 
     await query.edit_message_text(
         f"✏️ *Խմբագրել գումարը*\n\n"
@@ -608,7 +608,7 @@ async def start_edit_payment_comment(update: Update, context: ContextTypes.DEFAU
     try:
         payment_id = int(query.data.replace("payment_edit_comment_", ""))
     except ValueError:
-        logger.error(f"Неверный формат callback для редактирования комментария: {query.data}")
+        logger.error(f"Invalid callback format for editing comment: {query.data}")
         await query.edit_message_text("❌ Սխալ տվյալներ:")
         return ConversationHandler.END
 
@@ -617,7 +617,7 @@ async def start_edit_payment_comment(update: Update, context: ContextTypes.DEFAU
     payment = next((p for p in all_payments if p['id'] == payment_id), None)
 
     if not payment:
-        logger.warning(f"Попытка редактировать комментарий несуществующего платежа #{payment_id}")
+        logger.warning(f"Attempt to edit comment of non-existent payment #{payment_id}")
         await query.edit_message_text(
             f"❌ Վճարումը #{payment_id} չի գտնվել:\n\n"
             "Հնարավոր է այն արդեն ջնջվել է:",
@@ -628,7 +628,7 @@ async def start_edit_payment_comment(update: Update, context: ContextTypes.DEFAU
         return ConversationHandler.END
 
     context.user_data['editing_payment_id'] = payment_id
-    logger.info(f"Начато редактирование комментария платежа #{payment_id}")
+    logger.info(f"Started editing payment comment #{payment_id}")
 
     current_comment = payment.get('comment', '(չկա)')
 
@@ -887,7 +887,7 @@ async def send_payments_only_report(update: Update, context: ContextTypes.DEFAUL
         )
 
     except Exception as e:
-        logger.error(f"Ошибка создания отчета по платежам для {display_name}: {e}")
+        logger.error(f"Error creating payment report for {display_name}: {e}")
         await update.callback_query.edit_message_text(
             f"❌ Սխալ հաշվետվության ստեղծման ժամանակ: {e}",
             reply_markup=InlineKeyboardMarkup([[

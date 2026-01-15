@@ -31,12 +31,12 @@ class LocalizationManager:
             if os.path.exists(localization_file):
                 with open(localization_file, 'r', encoding='utf-8') as f:
                     self.translations = json.load(f)
-                logger.info(f"Загружены переводы для языков: {list(self.translations.keys())}")
+                logger.info(f"Translations loaded for languages: {list(self.translations.keys())}")
             else:
-                logger.warning(f"Файл локализации не найден: {localization_file}")
+                logger.warning(f"Localization file not found: {localization_file}")
                 self.translations = {}
         except Exception as e:
-            logger.error(f"Ошибка загрузки переводов: {e}")
+            logger.error(f"Error loading translations: {e}")
             self.translations = {}
     
     def save_translations(self):
@@ -49,9 +49,9 @@ class LocalizationManager:
             
             with open(localization_file, 'w', encoding='utf-8') as f:
                 json.dump(self.translations, f, ensure_ascii=False, indent=2)
-            logger.info("Переводы сохранены")
+            logger.info("Translations saved")
         except Exception as e:
-            logger.error(f"Ошибка сохранения переводов: {e}")
+            logger.error(f"Error saving translations: {e}")
     
     def get_text(self, key: str, language: str = None, **kwargs) -> str:
         """
@@ -104,7 +104,7 @@ class LocalizationManager:
         self.supported_languages[language_code] = language_name
         self.translations[language_code] = translations
         self.save_translations()
-        logger.info(f"Добавлен язык: {language_code} ({language_name})")
+        logger.info(f"Language added: {language_code} ({language_name})")
     
     def add_translation_key(self, key: str, translations: Dict[str, str]):
         """
@@ -132,7 +132,7 @@ class LocalizationManager:
             current[keys[-1]] = translation
         
         self.save_translations()
-        logger.info(f"Добавлен ключ перевода: {key}")
+        logger.info(f"Translation key added: {key}")
 
 # Глобальный экземпляр менеджера локализации
 localization_manager = LocalizationManager()
@@ -144,7 +144,7 @@ def get_user_language(user_id: int) -> str:
         settings = get_user_settings(user_id)
         return settings.get('language', localization_manager.default_language)
     except Exception as e:
-        logger.error(f"Ошибка получения языка пользователя {user_id}: {e}")
+        logger.error(f"Error getting user language {user_id}: {e}")
         return localization_manager.default_language
 
 def set_user_language(user_id: int, language: str):
@@ -152,9 +152,9 @@ def set_user_language(user_id: int, language: str):
     try:
         from .config_utils import update_user_settings
         update_user_settings(user_id, {'language': language})
-        logger.info(f"Установлен язык {language} для пользователя {user_id}")
+        logger.info(f"Language {language} set for user {user_id}")
     except Exception as e:
-        logger.error(f"Ошибка установки языка для пользователя {user_id}: {e}")
+        logger.error(f"Error setting language for user {user_id}: {e}")
 
 def _(key: str, user_id: int = None, **kwargs) -> str:
     """

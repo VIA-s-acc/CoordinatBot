@@ -2,10 +2,8 @@
 Утилиты для работы с конфигурацией и пользователями
 """
 import json
-import logging
-from ..config.settings import USERS_FILE, ALLOWED_USERS_FILE, BOT_CONFIG_FILE
+from ..config.settings import USERS_FILE, ALLOWED_USERS_FILE, BOT_CONFIG_FILE, logger
 
-logger = logging.getLogger(__name__)
 
 def load_json_file(file_path: str, default_value=None):
     """
@@ -15,12 +13,12 @@ def load_json_file(file_path: str, default_value=None):
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        logger.warning(f"Файл {file_path} не найден, создаем новый")
+        logger.warning(f"File {file_path} not found, creating new")
         if default_value is not None:
             save_json_file(file_path, default_value)
         return default_value or {}
     except json.JSONDecodeError as e:
-        logger.error(f"Ошибка декодирования JSON в файле {file_path}: {e}")
+        logger.error(f"JSON decoding error in file {file_path}: {e}")
         return default_value or {}
 
 def save_json_file(file_path: str, data):
@@ -32,7 +30,7 @@ def save_json_file(file_path: str, data):
             json.dump(data, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
-        logger.error(f"Ошибка сохранения JSON файла {file_path}: {e}")
+        logger.error(f"Error saving JSON file {file_path}: {e}")
         return False
 
 # Функции для работы с конфигурацией бота
@@ -274,8 +272,8 @@ async def send_to_log_chat(context: CallbackContext, message: str):
                 text=message,
                 parse_mode='HTML'
             )
-            logger.info(f"Сообщение успешно отправлено в лог-чат {log_chat_id}")
+            logger.info(f"Message successfully sent to log chat {log_chat_id}")
         except Exception as e:
-            logger.error(f"Ошибка отправки сообщения в лог-чат: {e}")
+            logger.error(f"Error sending message to log chat: {e}")
     else:
-        logger.warning("log_chat_id не установлен в bot_config.json. Используйте команду для настройки лог-чата.")
+        logger.warning("log_chat_id not set in bot_config.json. Use command to set log chat.")

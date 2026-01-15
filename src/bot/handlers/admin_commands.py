@@ -299,5 +299,5 @@ async def clean_duplicates_command(update: Update, context: CallbackContext):
             )
             
     except Exception as e:
-        logger.error(f"Ошибка очистки дубликатов: {e}")
+        logger.error(f"Error in dublicate cleaning: {e}")
         await update.message.reply_text(f"❌ Կրկնօրինակների մաքրման սխալ: {e}")

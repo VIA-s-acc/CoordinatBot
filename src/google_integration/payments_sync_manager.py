@@ -1,14 +1,12 @@
 """
 Менеджер синхронизации платежей между БД и Google Sheets
 """
-import logging
 from typing import List, Dict, Set
 from .payments_sheets_manager import PaymentsSheetsManager
 from ..database.database_manager import DatabaseManager
 from ..utils.config_utils import get_user_role
-from ..config.settings import UserRole
+from ..config.settings import UserRole, logger
 
-logger = logging.getLogger(__name__)
 
 
 class PaymentsSyncManager:
@@ -29,18 +27,18 @@ class PaymentsSyncManager:
         stats = {'added': 0, 'skipped': 0, 'errors': 0}
 
         try:
-            logger.info("🔄 Начинаем синхронизацию платежей из Google Sheets в БД")
+            logger.info("Starting payments synchronization from Google Sheets to DB")
 
             # Получаем все платежи из БД
             db_payments = self.db.get_payments()
             db_payment_ids = {payment['id'] for payment in db_payments}
 
-            logger.info(f"В БД найдено {len(db_payment_ids)} платежей")
+            logger.info(f"Found {len(db_payment_ids)} payments in DB")
 
             # Загружаем платежи из всех листов Google Sheets
             sheets_payments = self.payments_sheets.get_all_payments_from_sheets()
 
-            logger.info(f"В Google Sheets найдено {len(sheets_payments)} платежей")
+            logger.info(f"Found {len(sheets_payments)} payments in Google Sheets")
 
             # Синхронизируем платежи: собираем новые платежи и выполняем batch-вставку в БД
             new_payments = []
@@ -48,7 +46,7 @@ class PaymentsSyncManager:
                 payment_id = sheet_payment.get('id')
 
                 if not payment_id:
-                    logger.warning("Пропускаем платеж без ID")
+                    logger.warning("Skipping payment without ID")
                     stats['skipped'] += 1
                     continue
 
@@ -71,20 +69,20 @@ class PaymentsSyncManager:
                 try:
                     inserted = self.db.add_payments_batch(new_payments)
                     stats['added'] += inserted
-                    logger.info(f"✅ Батч-вставка платежей выполнена: добавлено {inserted}")
+                    logger.info(f"Batch payment insertion completed: {inserted} added")
                 except Exception as e:
-                    logger.error(f"❌ Ошибка батч-вставки платежей в БД: {e}", exc_info=True)
+                    logger.error(f"Error in batch payment insertion to DB: {e}", exc_info=True)
                     stats['errors'] += len(new_payments)
 
             logger.info(
-                f"✅ Синхронизация завершена. "
-                f"Добавлено: {stats['added']}, Пропущено: {stats['skipped']}, Ошибок: {stats['errors']}"
+                f"Synchronization completed. "
+                f"Added: {stats['added']}, Skipped: {stats['skipped']}, Errors: {stats['errors']}"
             )
 
             return stats
 
         except Exception as e:
-            logger.error(f"Критическая ошибка при синхронизации платежей: {e}", exc_info=True)
+            logger.error(f"Critical error during payments synchronization: {e}", exc_info=True)
             stats['errors'] += 1
             return stats
 
@@ -130,7 +128,7 @@ class PaymentsSyncManager:
                 target_sheet_name=target_sheet_name
             )
         except Exception as e:
-            logger.error(f"Ошибка при синхронизации платежа #{payment_id} в Sheets: {e}")
+            logger.error(f"Error synchronizing payment #{payment_id} to Sheets: {e}")
             return False
 
     def sync_payments_from_db_to_sheets(self) -> Dict[str, int]:
@@ -144,17 +142,17 @@ class PaymentsSyncManager:
         stats = {'added': 0, 'skipped': 0, 'errors': 0}
 
         try:
-            logger.info("🔄 Начинаем синхронизацию платежей из БД в Google Sheets")
+            logger.info("Starting payments synchronization from DB to Google Sheets")
 
             # Получаем все платежи из БД
             db_payments = self.db.get_payments()
-            logger.info(f"В БД найдено {len(db_payments)} платежей")
+            logger.info(f"Found {len(db_payments)} payments in DB")
 
             # Получаем все платежи из Google Sheets
             sheets_payments = self.payments_sheets.get_all_payments_from_sheets()
             sheets_payment_ids = {payment['id'] for payment in sheets_payments}
 
-            logger.info(f"В Google Sheets найдено {len(sheets_payment_ids)} платежей")
+            logger.info(f"Found {len(sheets_payment_ids)} payments in Google Sheets")
 
             # Группируем новые платежи по ролям для пакетной вставки
             from ..config.settings import UserRole
@@ -169,7 +167,7 @@ class PaymentsSyncManager:
                 payment_id = db_payment.get('id')
 
                 if not payment_id:
-                    logger.warning("Пропускаем платеж без ID")
+                    logger.warning("Skipping payment without ID")
                     stats['skipped'] += 1
                     continue
 
@@ -198,27 +196,27 @@ class PaymentsSyncManager:
             for role, payments in payments_by_role.items():
                 if payments:
                     try:
-                        logger.info(f"Пакетная вставка {len(payments)} платежей для роли {role}")
+                        logger.info(f"Batch inserting {len(payments)} payments for role {role}")
                         success = self.payments_sheets.add_payments_batch(payments, role)
                         if success:
                             stats['added'] += len(payments)
-                            logger.info(f"✅ Пакетно добавлено {len(payments)} платежей для роли {role}")
+                            logger.info(f"Batch added {len(payments)} payments for role {role}")
                         else:
                             stats['errors'] += len(payments)
-                            logger.error(f"❌ Ошибка пакетной вставки для роли {role}")
+                            logger.error(f"Error in batch insertion for role {role}")
                     except Exception as e:
-                        logger.error(f"❌ Ошибка при пакетной вставке для роли {role}: {e}", exc_info=True)
+                        logger.error(f"Error during batch insertion for role {role}: {e}", exc_info=True)
                         stats['errors'] += len(payments)
 
             logger.info(
-                f"✅ Синхронизация БД → Sheets завершена. "
-                f"Добавлено: {stats['added']}, Пропущено: {stats['skipped']}, Ошибок: {stats['errors']}"
+                f"DB → Sheets synchronization completed. "
+                f"Added: {stats['added']}, Skipped: {stats['skipped']}, Errors: {stats['errors']}"
             )
 
             return stats
 
         except Exception as e:
-            logger.error(f"Критическая ошибка при синхронизации БД → Sheets: {e}", exc_info=True)
+            logger.error(f"Critical error during DB → Sheets synchronization: {e}", exc_info=True)
             stats['errors'] += 1
             return stats
 
@@ -232,14 +230,14 @@ class PaymentsSyncManager:
         Returns:
             Общая статистика синхронизации
         """
-        logger.info("🔄 Запуск полной двусторонней синхронизации платежей")
+        logger.info("Starting full bidirectional payments synchronization")
 
         # 1. Синхронизируем из Sheets в БД
-        logger.info("📥 Sheets → БД...")
+        logger.info("Sheets → DB...")
         stats_sheets_to_db = self.sync_payments_from_sheets_to_db()
 
         # 2. Синхронизируем из БД в Sheets
-        logger.info("📤 БД → Sheets...")
+        logger.info("DB → Sheets...")
         stats_db_to_sheets = self.sync_payments_from_db_to_sheets()
 
         # Объединяем статистику
@@ -251,12 +249,12 @@ class PaymentsSyncManager:
         }
 
         logger.info(
-            f"✅ Полная синхронизация завершена.\n"
-            f"  Sheets → БД: добавлено {stats_sheets_to_db['added']}, "
-            f"пропущено {stats_sheets_to_db['skipped']}, ошибок {stats_sheets_to_db['errors']}\n"
-            f"  БД → Sheets: добавлено {stats_db_to_sheets['added']}, "
-            f"пропущено {stats_db_to_sheets['skipped']}, ошибок {stats_db_to_sheets['errors']}\n"
-            f"  Всего добавлено: {total_stats['total_added']}, ошибок: {total_stats['total_errors']}"
+            f"Full synchronization completed.\n"
+            f"  Sheets → DB: added {stats_sheets_to_db['added']}, "
+            f"skipped {stats_sheets_to_db['skipped']}, errors {stats_sheets_to_db['errors']}\n"
+            f"  DB → Sheets: added {stats_db_to_sheets['added']}, "
+            f"skipped {stats_db_to_sheets['skipped']}, errors {stats_db_to_sheets['errors']}\n"
+            f"  Total added: {total_stats['total_added']}, errors: {total_stats['total_errors']}"
         )
 
         return total_stats
@@ -297,17 +295,17 @@ class PaymentsSyncManager:
             }
 
             logger.info(
-                f"📊 Статус синхронизации: "
-                f"БД: {db_count}, Sheets: {sheets_count}, "
-                f"Синхронизировано: {status['synced']}, "
-                f"Не в Sheets: {status['in_db_not_in_sheets']}, "
-                f"Не в БД: {status['in_sheets_not_in_db']}"
+                f"Synchronization status: "
+                f"DB: {db_count}, Sheets: {sheets_count}, "
+                f"Synced: {status['synced']}, "
+                f"Not in Sheets: {status['in_db_not_in_sheets']}, "
+                f"Not in DB: {status['in_sheets_not_in_db']}"
             )
 
             return status
 
         except Exception as e:
-            logger.error(f"Ошибка при получении статуса синхронизации: {e}", exc_info=True)
+            logger.error(f"Error getting synchronization status: {e}", exc_info=True)
             return {
                 'error': str(e),
                 'db_count': 0,
@@ -325,7 +323,7 @@ class PaymentsSyncManager:
         status = self.get_sync_status()
 
         if status.get('error'):
-            logger.error("Ошибка при проверке синхронизации")
+            logger.error("Error during synchronization check")
             return False
 
         is_synced = (
@@ -334,12 +332,12 @@ class PaymentsSyncManager:
         )
 
         if is_synced:
-            logger.info("✅ Платежи синхронизированы")
+            logger.info("Payments are synchronized")
         else:
             logger.warning(
-                f"⚠️ Обнаружены несинхронизированные платежи: "
-                f"{status['in_db_not_in_sheets']} не в Sheets, "
-                f"{status['in_sheets_not_in_db']} не в БД"
+                f"Unsynchronized payments detected: "
+                f"{status['in_db_not_in_sheets']} not in Sheets, "
+                f"{status['in_sheets_not_in_db']} not in DB"
             )
 
         return is_synced

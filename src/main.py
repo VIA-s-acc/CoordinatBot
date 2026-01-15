@@ -60,20 +60,20 @@ def main():
     try:
         # Инициализация базы данных
         if not init_db():
-            logger.error("Не удалось инициализировать базу данных!")
+            logger.error("Failed to initialize database!")
             return
 
         # Миграция пользователей к системе ролей (если требуется)
         try:
             from src.utils.migrate_users_roles import auto_migrate_if_needed
-            logger.info("🔄 Проверка необходимости миграции пользователей...")
+            logger.info("🔄 Checking user migration necessity...")
             auto_migrate_if_needed()
         except Exception as e:
-            logger.error(f"❌ Ошибка при миграции пользователей: {e}", exc_info=True)
+            logger.error(f"❌ Error during user migration: {e}", exc_info=True)
 
-        # Запуск асинхронного воркера для Google Sheets
+        # Start async worker for Google Sheets
         start_worker()
-        logger.info("🔄 Асинхронный воркер Google Sheets запущен")
+        logger.info("🔄 Google Sheets async worker started")
 
         # Инициализация таблицы платежей и синхронизация
         try:
@@ -82,29 +82,29 @@ def main():
             from src.config.settings import PAYMENTS_SPREADSHEET_ID
 
             if PAYMENTS_SPREADSHEET_ID:
-                logger.info("📊 Инициализация таблицы платежей...")
+                logger.info("📊 Initializing payments table...")
                 payments_sheets = PaymentsSheetsManager()
 
                 if payments_sheets.initialize_payment_sheets():
-                    logger.info("✅ Таблица платежей инициализирована")
+                    logger.info("✅ Payments table initialized")
 
-                    # Синхронизация платежей
-                    logger.info("🔄 Синхронизация платежей...")
+                    # Sync payments
+                    logger.info("🔄 Syncing payments...")
                     sync_manager = PaymentsSyncManager()
                     stats = sync_manager.full_sync_payments()
 
                     logger.info(
-                        f"✅ Синхронизация платежей завершена. "
-                        f"Всего добавлено: {stats['total_added']}, "
-                        f"Ошибок: {stats['total_errors']}"
+                        f"✅ Payment synchronization completed. "
+                        f"Total added: {stats['total_added']}, "
+                        f"Errors: {stats['total_errors']}"
                     )
                 else:
-                    logger.warning("⚠️ Не удалось инициализировать таблицу платежей")
+                    logger.warning("⚠️ Failed to initialize payments table")
             else:
-                logger.warning("⚠️ PAYMENTS_SPREADSHEET_ID не установлен. Синхронизация платежей отключена.")
+                logger.warning("⚠️ PAYMENTS_SPREADSHEET_ID not set. Payment synchronization disabled.")
 
         except Exception as e:
-            logger.error(f"❌ Ошибка при инициализации платежей: {e}", exc_info=True)
+            logger.error(f"❌ Error during payment initialization: {e}", exc_info=True)
 
         # Создание приложения
         application = Application.builder().token(TOKEN).build()
@@ -189,7 +189,7 @@ def main():
         from src.config.settings import BACKUP_CHAT_ID, BACKUP_INTERVAL_HOURS
         if BACKUP_CHAT_ID:
             print(BACKUP_CHAT_ID, BACKUP_INTERVAL_HOURS)
-            logger.info(f"Настройка автоматического бэкапа: чат {BACKUP_CHAT_ID}, интервал {BACKUP_INTERVAL_HOURS}ч")
+            logger.info(f"Setting up automatic backup: chat {BACKUP_CHAT_ID}, interval {BACKUP_INTERVAL_HOURS}h")
             job_queue = application.job_queue
             job_queue.run_repeating(
                 scheduled_backup_job,
@@ -198,19 +198,19 @@ def main():
                 name="automated_backup"
             )
         else:
-            logger.info("BACKUP_CHAT_ID не установлен, автоматический бэкап отключен")
+            logger.info("BACKUP_CHAT_ID not set, automatic backup disabled")
 
         # Отдельные обработчики для специфичных callback'ов (должны быть ДО общего button_handler)
         from src.bot.handlers.edit_handlers import confirm_delete, cancel_edit
-        logger.info("Регистрируем handlers для confirm_delete_ и cancel_edit_")
+        logger.info("Registering handlers for confirm_delete_ and cancel_edit_")
         
-        # Тестируем, что функции импортированы правильно
-        logger.info(f"confirm_delete функция: {confirm_delete}")
-        logger.info(f"cancel_edit функция: {cancel_edit}")
+        # Test that functions are imported correctly
+        logger.info(f"confirm_delete function: {confirm_delete}")
+        logger.info(f"cancel_edit function: {cancel_edit}")
         
         application.add_handler(CallbackQueryHandler(confirm_delete, pattern=r"^confirm_delete_"))
         application.add_handler(CallbackQueryHandler(cancel_edit, pattern=r"^cancel_edit_"))
-        logger.info("Handlers для confirm_delete_ и cancel_edit_ зарегистрированы")
+        logger.info("Handlers for confirm_delete_ and cancel_edit_ registered")
         application.add_handler(CommandHandler("clean_duplicates", clean_duplicates_command))
 
         # Регистрация обработчиков управления ролями
@@ -250,19 +250,19 @@ def main():
         # Регистрация обработчика ошибок
         application.add_error_handler(error_handler)
         
-        # Запуск бота
-        logger.info("🚀 Бот запущен в новой модульной архитектуре!")
-        print("🚀 Бот запущен! Нажмите Ctrl+C для остановки.")
+        # Start bot
+        logger.info("🚀 Bot started in new modular architecture!")
+        print("🚀 Bot started! Press Ctrl+C to stop.")
         
         application.run_polling(allowed_updates=Update.ALL_TYPES)
         
     except KeyboardInterrupt:
-        logger.info("Получен сигнал остановки")
+        logger.info("Stop signal received")
         stop_worker()
-        logger.info("Воркер Google Sheets остановлен")
+        logger.info("Google Sheets worker stopped")
     except Exception as e:
-        logger.error(f"Критическая ошибка при запуске бота: {e}")
-        print(f"❌ Критическая ошибка: {e}")
+        logger.error(f"Critical error during bot startup: {e}")
+        print(f"❌ Critical error: {e}")
     finally:
         stop_worker()
 
@@ -277,16 +277,16 @@ if __name__ == '__main__':
     if args.deploy:
         os.environ['DEPLOY_MODE'] = 'true'
         DATA_DIR = '/app_data'
-        logger.info("🚀 Запуск в режиме деплоя (используется /app_data volume)")
+        logger.info("🚀 Starting in deploy mode (using /app_data volume)")
     elif args.local:
         os.environ['DEPLOY_MODE'] = 'false'
         DATA_DIR = 'data'
-        logger.info("🏠 Запуск в локальном режиме (используется ./app_data)")
+        logger.info("🏠 Starting in local mode (using ./app_data)")
     else:
         # По умолчанию используем режим деплоя
         os.environ['DEPLOY_MODE'] = 'true'
         DATA_DIR = '/app_data'
-        logger.info("🚀 Запуск в режиме деплоя по умолчанию (используется /app_data volume)")
+        logger.info("🚀 Starting in default deploy mode (using /app_data volume)")
     
     # Создаем директорию для данных если ее нет
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -300,7 +300,7 @@ if __name__ == '__main__':
                 volume_items = set(os.listdir(DATA_DIR))
 
                 if local_items - volume_items:
-                    logger.info("🔄 Обнаружено расхождение данных, выполняется полная синхронизация")
+                    logger.info("🔄 Data discrepancy detected, performing full synchronization")
 
                     for item in os.listdir(local_data_dir):
                         src_path = os.path.join(local_data_dir, item)
@@ -316,12 +316,12 @@ if __name__ == '__main__':
                         else:
                             shutil.copy2(src_path, dst_path)
 
-                    logger.info("✅ Полная синхронизация данных завершена")
+                    logger.info("✅ Full data synchronization completed")
                 else:
-                    logger.info("✅ Структура данных полностью совпадает, синхронизация не требуется")
+                    logger.info("✅ Data structure fully matches, synchronization not required")
 
             except Exception as e:
-                logger.error(f"❌ Ошибка при синхронизации данных: {e}")
+                logger.error(f"❌ Error during data synchronization: {e}")
 
     
     # Инициализация файлов конфигурации, если они не существуют

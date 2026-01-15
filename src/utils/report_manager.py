@@ -56,7 +56,7 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
             
             # Если для чата настроен конкретный лист, отправляем отчет только для этого листа
             if configured_sheet and record_sheet and configured_sheet != record_sheet:
-                logger.info(f"Пропускаем отчет для чата {chat_id}: лист '{record_sheet}' не соответствует настроенному '{configured_sheet}'")
+                logger.info(f"Skipping report for chat {chat_id}: sheet '{record_sheet}' does not match configured '{configured_sheet}'")
                 continue
                 
             await context.bot.send_message(
@@ -64,9 +64,9 @@ async def send_report(context: CallbackContext, action: str, record: dict, user:
                 text=report_text,
                 parse_mode="HTML"
             )
-            logger.info(f"Отчет отправлен в чат {chat_id} для листа '{record_sheet}'")
+            logger.info(f"Report sent to chat {chat_id} for sheet '{record_sheet}'")
         except Exception as e:
-            logger.error(f"Սխալ հաշվետվություն ուղարկելիս {chat_id}: {e}")
+            logger.error(f"Error sending report to {chat_id}: {e}")
 
 def format_record_info(record: dict) -> str:
     """Форматирует информацию о записи"""
@@ -177,9 +177,9 @@ class ReportManager:
                     # Сравниваем даты обновления, берем более новую
                     if current_updated > existing_updated:
                         unique_records[record_id] = record
-                        logger.info(f"Заменили дубликат записи {record_id}: {existing_updated} -> {current_updated}")
+                        logger.info(f"Replaced duplicate record {record_id}: {existing_updated} -> {current_updated}")
                     else:
-                        logger.info(f"Пропустили старый дубликат записи {record_id}: {current_updated} <= {existing_updated}")
+                        logger.info(f"Skipped old duplicate record {record_id}: {current_updated} <= {existing_updated}")
                 else:
                     unique_records[record_id] = record
             
@@ -197,13 +197,13 @@ class ReportManager:
                 # Безопасный парсинг даты
                 record_date = safe_parse_date_or_none(record['date'])
                 if record_date is None:
-                    logger.warning(f"Пропускаем запись с некорректной датой: {record['date']}")
+                    logger.warning(f"Skipping record with incorrect date: {record['date']}")
                     continue
                     
                 if record_date >= cutoff_date:
                     filtered_records.append(record)
             
-            logger.info(f"После дедупликации: {len(unique_records)} уникальных записей, {len(filtered_records)} после фильтрации")
+            logger.info(f"After deduplication: {len(unique_records)} unique records, {len(filtered_records)} after filtering")
             
             # Группируем по листам
             sheets = {}
@@ -230,7 +230,7 @@ class ReportManager:
                 )
                 
         except Exception as e:
-            logger.error(f"Ошибка генерации отчета для {display_name}: {e}")
+            logger.error(f"Error generating report for {display_name}: {e}")
             await update.effective_message.reply_text(f"❌ Հաշվետվություն ստեղծելու սխալ: {e}")
     
     async def _generate_sheet_report(self, display_name: str, spreadsheet_id: str, 
@@ -258,7 +258,7 @@ class ReportManager:
             
             # Преобразуем обратно в список
             deduplicated_records = list(unique_records_dict.values())
-            logger.info(f"Лист {sheet_name}: было {len(records)} записей, после дедупликации {len(deduplicated_records)}")
+            logger.info(f"Sheet {sheet_name}: had {len(records)} records, after deduplication {len(deduplicated_records)}")
             
             df = pd.DataFrame(deduplicated_records)
             if not df.empty:
@@ -303,7 +303,7 @@ class ReportManager:
             )
             
         except Exception as e:
-            logger.error(f"Ошибка генерации отчета по листу {sheet_name}: {e}")
+            logger.error(f"Error generating report for sheet {sheet_name}: {e}")
     
     async def _generate_total_report(self, display_name: str, spreadsheet_id: str, 
                                    sheet_name: str, all_summaries: List[Dict], 
@@ -359,7 +359,7 @@ class ReportManager:
             )
             
         except Exception as e:
-            logger.error(f"Ошибка генерации итогового отчета: {e}")
+            logger.error(f"Error generating final report: {e}")
     
     async def generate_statistics_report(self, update: Update, context: CallbackContext):
         """Генерирует общую статистику"""
@@ -385,7 +385,7 @@ class ReportManager:
             
             # Преобразуем в список уникальных записей
             deduplicated_records = list(unique_records.values())
-            logger.info(f"Статистика: было {len(records)} записей, после дедупликации {len(deduplicated_records)}")
+            logger.info(f"Statistics: had {len(records)} records, after deduplication {len(deduplicated_records)}")
             
             df = pd.DataFrame(deduplicated_records)
             
@@ -420,7 +420,7 @@ class ReportManager:
             await update.message.reply_text(stats_text, parse_mode="HTML")
             
         except Exception as e:
-            logger.error(f"Ошибка генерации статистики: {e}")
+            logger.error(f"Error generating statistics: {e}")
             await update.message.reply_text(f"❌ Վիճակագրություն ստեղծելու սխալ: {e}")
 
 # Создаем глобальный экземпляр менеджера отчетов

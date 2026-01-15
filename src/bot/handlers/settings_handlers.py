@@ -236,7 +236,7 @@ async def system_info(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка получения системной информации: {e}")
+        logger.error(f"Error getting system information: {e}")
         try:
             err_text = _("notifications.error", user_id)
             back_text = _("menu.back", user_id)
@@ -347,7 +347,7 @@ async def sort_sheet_by_date_handler(update: Update, context: CallbackContext):
             )
         
     except Exception as e:
-        logger.error(f"Ошибка сортировки листа: {e}")
+        logger.error(f"Error sorting sheet: {e}")
         try:
             back_text = _("menu.back", user_id)
         except Exception:

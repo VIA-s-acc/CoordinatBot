@@ -2,7 +2,6 @@
 Обработчики для добавления записей
 """
 import uuid
-import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler
@@ -13,18 +12,17 @@ from ...utils.config_utils import is_user_allowed, get_user_settings, update_use
 from ...utils.formatting import format_record_info
 from ...database.database_manager import add_record_to_db
 from ...google_integration.async_sheets_worker import add_record_async
-from ...config.settings import ACTIVE_SPREADSHEET_ID
+from ...config.settings import ACTIVE_SPREADSHEET_ID, logger
 from ...utils.report_manager import send_report
 from ..handlers.translation_handlers import _
 
-logger = logging.getLogger(__name__)
 
 async def start_add_record(update: Update, context: CallbackContext):
     """Начинает процесс добавления записи"""
     query = update.callback_query
     user_id = update.effective_user.id
     
-    logger.info(f"start_add_record вызвана для пользователя {user_id}, callback_data: {query.data}")
+    logger.info(f"start_add_record called for user {user_id}, callback_data: {query.data}")
     
     if not is_user_allowed(user_id):
         await query.edit_message_text("❌ Ваш доступ запрещен:")
@@ -36,13 +34,13 @@ async def start_add_record(update: Update, context: CallbackContext):
     # Получаем имя листа из callback_data
     if query.data and query.data.startswith("add_record_sheet_"):
         sheet_name = query.data.replace("add_record_sheet_", "")
-        logger.info(f"Извлечено имя листа: {sheet_name}")
+        logger.info(f"Extracted sheet name: {sheet_name}")
         # Сохраняем имя листа в context.user_data
         context.user_data['selected_sheet_name'] = sheet_name
     else:
         # Попытаемся получить из context.user_data
         sheet_name = context.user_data.get('selected_sheet_name')
-        logger.warning(f"Имя листа не найдено в callback_data, получено из context: {sheet_name}")
+        logger.warning(f"Sheet name not found in callback_data, obtained from context: {sheet_name}")
     
     if not sheet_name:
         # Если лист не выбран, показываем сообщение об ошибке и возвращаем в меню
@@ -477,11 +475,11 @@ async def get_amount(update: Update, context: CallbackContext):
             result_text = "✅ Գրառումն ավելացված է:\n\n"
 
         if db_success and sheet_success:
-            logger.info(f"✅ Պահպանված է ՏԲ-ում և Google Sheets очереди ՝ ID: {record['id']}")
+            logger.info(f"Record saved to DB and added to Google Sheets queue - ID: {record['id']}")
         elif db_success:
-            logger.info(f"⚠️ Պահպանված է ՏԲ-ում ՝ ID: {record['id']}")
+            logger.info(f"Record saved to DB - ID: {record['id']}")
         else:
-            logger.error(f"❌ Գրառումը չի պահպանվել ՏԲ-ում ՝ ID: {record['id']}")
+            logger.error(f"Failed to save record to DB - ID: {record['id']}")
 
         if db_success or sheet_success:
             # Добавляем запись в отчеты пользователя
@@ -584,7 +582,7 @@ async def start_record_conversation(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = update.effective_user.id
     
-    logger.info(f"start_record_conversation вызвана для пользователя {user_id}")
+    logger.info(f"start_record_conversation called for user {user_id}")
     
     if not is_user_allowed(user_id):
         await query.edit_message_text("❌ Ваш доступ запрещен:")
@@ -606,7 +604,7 @@ async def start_record_selection(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = update.effective_user.id
     
-    logger.info(f"start_record_selection вызвана для пользователя {user_id}")
+    logger.info(f"start_record_selection called for user {user_id}")
     
     if not is_user_allowed(user_id):
         await query.edit_message_text("❌ Ваш доступ запрещен:")
@@ -630,7 +628,7 @@ async def start_skip_record_selection(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = update.effective_user.id
     
-    logger.info(f"start_skip_record_selection вызвана для пользователя {user_id}")
+    logger.info(f"start_skip_record_selection called for user {user_id}")
     
     if not is_user_allowed(user_id):
         await query.edit_message_text("❌ Ваш доступ запрещен:")

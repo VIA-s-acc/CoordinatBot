@@ -40,14 +40,14 @@ async def show_sheet_selection_for_add_record(update: Update, context: CallbackC
     query = update.callback_query
     user_id = update.effective_user.id
     
-    logger.info(f"show_sheet_selection_for_add_record вызвана для пользователя {user_id}, record_type: {record_type}")
+    logger.info(f"show_sheet_selection_for_add_record called for user {user_id}, record_type: {record_type}")
     
     # Получаем настройки пользователя
     user_settings = get_user_settings(user_id)
     spreadsheet_id = ACTIVE_SPREADSHEET_ID
     
     if not spreadsheet_id:
-        logger.warning(f"У пользователя {user_id} не настроен активный spreadsheet")
+        logger.warning(f"User {user_id} does not have active spreadsheet configured")
         # Используем правильную кнопку возврата в главное меню
         keyboard = [[InlineKeyboardButton("🏠 Գլխավոր Մենյու", callback_data="back_to_menu")]]
         await query.edit_message_text(
@@ -57,11 +57,11 @@ async def show_sheet_selection_for_add_record(update: Update, context: CallbackC
         return
     
     try:
-        logger.info(f"Получаем информацию о листах для spreadsheet_id: {spreadsheet_id}")
+        logger.info(f"Getting sheets information for spreadsheet_id: {spreadsheet_id}")
         sheets_info, spreadsheet_title = get_cached_sheets_info(spreadsheet_id)
-        
+
         if not sheets_info:
-            logger.warning(f"Нет листов в spreadsheet {spreadsheet_id}")
+            logger.warning(f"No sheets in spreadsheet {spreadsheet_id}")
             # Используем правильную кнопку возврата в главное меню
             keyboard = [[InlineKeyboardButton("🏠 Գլխավոր Մենյու", callback_data="back_to_menu")]]
             await query.edit_message_text(
@@ -70,22 +70,22 @@ async def show_sheet_selection_for_add_record(update: Update, context: CallbackC
             )
             return
         
-        logger.info(f"Создаем клавиатуру для {len(sheets_info)} листов")
+        logger.info(f"Creating keyboard for {len(sheets_info)} sheets")
         keyboard = create_add_record_sheet_selection(sheets_info, record_type)
-        
+
         record_text = "գրառում" if record_type == "record" else "բացթողում"
-        logger.info(f"Отправляем сообщение с клавиатурой для выбора листа")
+        logger.info(f"Sending message with keyboard for sheet selection")
         await query.edit_message_text(
             f"📋 Ընտրեք թերթիկը {record_text}-ի համար:\n\n"
             f"📊 Աղյուսակ: <b>{spreadsheet_title}</b>",
             parse_mode="HTML",
             reply_markup=keyboard
         )
-        logger.info(f"Сообщение с клавиатурой успешно отправлено")
-        
+        logger.info(f"Message with keyboard sent successfully")
+
     except Exception as e:
-        logger.error(f"Ошибка при создании выбора листов: {e}")
-        logger.error(f"Полная ошибка: {e}", exc_info=True)
+        logger.error(f"Error creating sheet selection: {e}")
+        logger.error(f"Full error: {e}", exc_info=True)
         # Используем правильную кнопку возврата в главное меню
         keyboard = [[InlineKeyboardButton("🏠 Գլխավոր Մենյու", callback_data="back_to_menu")]]
         await query.edit_message_text(
@@ -106,11 +106,11 @@ async def button_handler(update: Update, context: CallbackContext):
     await query.answer()
     
     data = query.data
-    logger.info(f"Обработка callback: {data} от пользователя {user_id}")
+    logger.info(f"Processing callback: {data} from user {user_id}")
     
     # ДЕБАГ: Проверяем специфичные callback'и
     if data.startswith("confirm_delete_"):
-        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: callback {data} попал в button_handler вместо confirm_delete handler!")
+        logger.error(f"CRITICAL ERROR: callback {data} went to button_handler instead of confirm_delete handler!")
         await query.edit_message_text(
             f"❌ Техническая ошибка\n\n"
             f"Callback {data} попал в неправильный обработчик.\n"
@@ -120,7 +120,7 @@ async def button_handler(update: Update, context: CallbackContext):
         return
     
     if data.startswith("cancel_edit_"):
-        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: callback {data} попал в button_handler вместо cancel_edit handler!")
+        logger.error(f"CRITICAL ERROR: callback {data} went to button_handler instead of cancel_edit handler!")
         await query.edit_message_text(
             f"❌ Техническая ошибка\n\n"
             f"Callback {data} попал в неправильный обработчик.\n"
@@ -131,7 +131,7 @@ async def button_handler(update: Update, context: CallbackContext):
     
     # ДЕБАГ: Проверяем, не должен ли этот callback обрабатываться ConversationHandler'ом
     if data.startswith(("add_record_sheet_", "add_skip_sheet_")):
-        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: callback {data} попал в button_handler вместо ConversationHandler!")
+        logger.error(f"CRITICAL ERROR: callback {data} went to button_handler instead of ConversationHandler!")
         await query.edit_message_text(
             f"❌ Техническая ошибка\n\n"
             f"Callback {data} попал в неправильный обработчик.\n"
@@ -157,11 +157,11 @@ async def button_handler(update: Update, context: CallbackContext):
     
     # Обработка выбора листа для добавления записи - УДАЛЕНО, теперь обрабатывается ConversationHandler
     # elif data == "add_record_select_sheet":
-    #     logger.info(f"Вызываем show_sheet_selection_for_add_record для record")
+    #     logger.info(f"Calling show_sheet_selection_for_add_record for record")
     #     await show_sheet_selection_for_add_record(update, context, "record")
     
     elif data == "add_skip_record_select_sheet":
-        logger.info(f"Вызываем show_sheet_selection_for_add_record для skip")
+        logger.info(f"Calling show_sheet_selection_for_add_record for skip")
         await show_sheet_selection_for_add_record(update, context, "skip")
     
 
@@ -487,16 +487,16 @@ async def button_handler(update: Update, context: CallbackContext):
         return
     
     else:
-        logger.warning(f"Необработанный callback: {data}")
+        logger.warning(f"Unprocessed callback: {data}")
         # Дополнительная диагностика для специфичных callback'ов
         if data.startswith("confirm_delete_"):
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: confirm_delete callback {data} попал в button_handler!")
+            logger.error(f"CRITICAL ERROR: confirm_delete callback {data} went to button_handler!")
         elif data.startswith("cancel_edit_"):
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: cancel_edit callback {data} попал в button_handler!")
+            logger.error(f"CRITICAL ERROR: cancel_edit callback {data} went to button_handler!")
         
         # Проверяем, не является ли это callback'ом для ConversationHandler
         if data.startswith(("add_record_sheet_", "add_skip_sheet_")):
-            logger.error(f"ОШИБКА: callback {data} должен обрабатываться ConversationHandler, но попал в button_handler!")
+            logger.error(f"ERROR: callback {data} should be handled by ConversationHandler, but went to button_handler!")
             await query.edit_message_text(
                 "❌ Сհալ: callback не обрабатывается правильно\n"
                 "Попробуйте снова или обратитесь к администратору",
@@ -837,7 +837,7 @@ async def generate_user_report(update: Update, context: CallbackContext, display
         )
         
     except Exception as e:
-        logger.error(f"Ошибка создания отчета для {display_name}: {e}")
+        logger.error(f"Error creating report for {display_name}: {e}")
         await query.edit_message_text(
             f"❌ Հաշվետվություն ստեղծելու սխալ: {e}",
             reply_markup=create_back_to_menu_keyboard()
@@ -888,7 +888,7 @@ async def show_my_payments(update: Update, context: CallbackContext):
             await send_payments_only_report(update, context, display_name)
 
     except Exception as e:
-        logger.error(f"Ошибка получения платежей пользователя {user_id}: {e}")
+        logger.error(f"Error getting user payments {user_id}: {e}")
         await query.edit_message_text(
             f"❌ Վճարումների տեղեկությունները ստանալու սխալ: Փորձեք նորից:",
             reply_markup=InlineKeyboardMarkup([
@@ -1272,7 +1272,7 @@ async def cleanup_backups_by_count(update: Update, context: CallbackContext, kee
         )
         
     except Exception as e:
-        logger.error(f"Ошибка очистки резервных копий: {e}")
+        logger.error(f"Error cleaning up backups: {e}")
         keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="cleanup_backups")]]
         await query.edit_message_text(
             f"❌ <b>{_('backup.error_cleanup', user_id)}</b>\n\n"
@@ -1351,7 +1351,7 @@ async def cleanup_backups_by_age(update: Update, context: CallbackContext, max_a
         )
         
     except Exception as e:
-        logger.error(f"Ошибка очистки резервных копий по возрасту: {e}")
+        logger.error(f"Error cleaning up backups by age: {e}")
         keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="cleanup_backups")]]
         await query.edit_message_text(
             f"❌ <b>{_('backup.error_cleanup', user_id)}</b>\n\n"
@@ -1439,7 +1439,7 @@ async def user_stats_menu(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка в user_stats_menu: {e}")
+        logger.error(f"Error in user_stats_menu: {e}")
         keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]]
         await query.edit_message_text(
             f"❌ <b>Ошибка</b>\n\n<code>{str(e)}</code>",
@@ -1644,7 +1644,7 @@ async def show_authorized_users_handler(update: Update, context: CallbackContext
         )
         
     except Exception as e:
-        logger.error(f"Ошибка в show_authorized_users_handler: {e}")
+        logger.error(f"Error in show_authorized_users_handler: {e}")
         keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_permissions")]]
         await query.edit_message_text(
             f"❌ <b>Ошибка</b>\n\n<code>{str(e)}</code>",
@@ -1759,7 +1759,7 @@ async def user_list(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка в user_list: {e}")
+        logger.error(f"Error in user_list: {e}")
         keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="user_settings_menu")]]
         await query.edit_message_text(
             f"❌ <b>Ошибка</b>\n\n<code>{str(e)}</code>",
@@ -1855,7 +1855,7 @@ async def add_user_id_to_allowed(user_id_to_add: int) -> bool:
         return True
         
     except Exception as e:
-        logger.error(f"Ошибка при добавлении пользователя {user_id_to_add}: {e}")
+        logger.error(f"Error adding user {user_id_to_add}: {e}")
         return False
 
 async def handle_user_id_input(update: Update, context: CallbackContext):
@@ -1957,7 +1957,7 @@ async def conversation_fallback_handler(update: Update, context: CallbackContext
     await query.answer()
     
     data = query.data
-    logger.info(f"ConversationHandler fallback: {data} от пользователя {user_id}")
+    logger.info(f"ConversationHandler fallback: {data} from user {user_id}")
     
     # Только для кнопок возврата в меню - завершаем диалог
     if data in ["back_to_menu", "main_menu"]:
@@ -1985,12 +1985,12 @@ async def conversation_fallback_handler(update: Update, context: CallbackContext
         context.user_data.pop('payment', None)
         context.user_data.pop('selected_sheet_name', None)
         
-        logger.info(f"Завершение ConversationHandler и переход к button_handler для: {data}")
+        logger.info(f"Ending ConversationHandler and switching to button_handler for: {data}")
         
         # Имитируем новый callback для button_handler
         await button_handler(update, context)
         return ConversationHandler.END
     
     # Для всех остальных callback'ов - просто завершаем ConversationHandler
-    logger.info(f"Неизвестный callback в ConversationHandler fallback: {data}")
+    logger.info(f"Unknown callback in ConversationHandler fallback: {data}")
     return ConversationHandler.END

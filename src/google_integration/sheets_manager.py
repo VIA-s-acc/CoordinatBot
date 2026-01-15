@@ -29,7 +29,7 @@ class GoogleSheetsManager:
                 )
                 self._client = gspread.authorize(creds)
             except Exception as e:
-                logger.error(f"Ошибка авторизации Google Sheets: {e}")
+                logger.error(f"Google Sheets authorization error: {e}")
                 return None
         return self._client
 
@@ -41,7 +41,7 @@ class GoogleSheetsManager:
                 return client.list_spreadsheet_files()
             return []
         except Exception as e:
-            logger.error(f"Ошибка получения списка спредшитов: {e}")
+            logger.error(f"Error getting list of spreadsheets: {e}")
             return []
 
     def get_all_spreadsheets(self):
@@ -59,7 +59,7 @@ class GoogleSheetsManager:
             
             return results.get('files', [])
         except Exception as e:
-            logger.error(f"Ошибка получения списка спредшитов через Drive API: {e}")
+            logger.error(f"Error getting list of spreadsheets via Drive API: {e}")
             return []
 
     def open_sheet_by_id(self, spreadsheet_id: str):
@@ -70,7 +70,7 @@ class GoogleSheetsManager:
                 return client.open_by_key(spreadsheet_id)
             return None
         except Exception as e:
-            logger.error(f"Ошибка открытия спредшита {spreadsheet_id}: {e}")
+            logger.error(f"Error opening spreadsheet {spreadsheet_id}: {e}")
             return None
 
     def get_worksheets_info(self, spreadsheet_id: str) -> Tuple[List[Dict], str]:
@@ -95,7 +95,7 @@ class GoogleSheetsManager:
             
             return sheets_info, sheet.title
         except Exception as e:
-            logger.error(f"Ошибка получения информации о листах: {e}")
+            logger.error(f"Error getting worksheets information: {e}")
             return [], "Error"
 
     def get_worksheet_by_name(self, spreadsheet_id: str, sheet_name: str):
@@ -106,7 +106,7 @@ class GoogleSheetsManager:
                 return sheet.worksheet(sheet_name)
             return None
         except Exception as e:
-            logger.error(f"Ошибка получения листа {sheet_name}: {e}")
+            logger.error(f"Error getting worksheet {sheet_name}: {e}")
             return None
 
     def get_spreadsheet_info(self, spreadsheet_id: str) -> Optional[Dict]:
@@ -133,7 +133,7 @@ class GoogleSheetsManager:
                 'sheets_count': len(sheets_info)
             }
         except Exception as e:
-            logger.error(f"Ошибка получения информации о спредшите: {e}")
+            logger.error(f"Error getting spreadsheet information: {e}")
             return None
 
     def ensure_headers(self, worksheet, headers: List[str]):
@@ -141,10 +141,10 @@ class GoogleSheetsManager:
         try:
             current_headers = worksheet.row_values(1)
             if current_headers != headers:
-                logger.info("🔁 Обновление заголовков на листе")
+                logger.info("Updating headers on the sheet")
                 worksheet.update("A1:F1", [headers])
         except Exception as e:
-            logger.error(f"❌ Ошибка при установке заголовков: {e}")
+            logger.error(f"Error setting headers: {e}")
 
     def add_record_to_sheet(self, spreadsheet_id: str, sheet_name: str, record: Dict) -> bool:
         """Добавляет запись в Google Sheet с сортировкой по дате, используя пакетную вставку."""
@@ -152,7 +152,7 @@ class GoogleSheetsManager:
             # Получаем рабочий лист
             worksheet = self.get_worksheet_by_name(spreadsheet_id, sheet_name)
             if not worksheet:
-                logger.error(f"Лист {sheet_name} не найден")
+                logger.error(f"Sheet {sheet_name} not found")
                 return False
 
             headers = ['ID', 'ամսաթիվ', 'մատակարար', 'ուղղություն', 'ծախսի բնութագիր', 'Արժեք']
@@ -166,7 +166,7 @@ class GoogleSheetsManager:
                     date_obj = datetime.strptime(formatted_date, '%Y-%m-%d')
                     formatted_date = date_obj.strftime('%d.%m.%y')
                 except ValueError:
-                    logger.warning(f"Неверный формат даты: {formatted_date}")
+                    logger.warning(f"Invalid date format: {formatted_date}")
                     formatted_date = record.get('date', '')
 
             new_row = [
@@ -209,16 +209,16 @@ class GoogleSheetsManager:
                                     insert_row = i + 2  # +2 потому что записи начинаются с 2-й строки
                                     break
                 except Exception as e:
-                    logger.warning(f"Ошибка при поиске позиции для вставки: {e}")
+                    logger.warning(f"Error finding insert position: {e}")
 
             # Пакетная запись новой строки в таблицу
             worksheet.insert_row(new_row, insert_row)
-            logger.info(f"Запись {record.get('id')} вставлена в позицию {insert_row} с сортировкой по дате")
+            logger.info(f"Record {record.get('id')} inserted at position {insert_row} with date sorting")
 
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка добавления записи в Google Sheets: {e}")
+            logger.error(f"Error adding record to Google Sheets: {e}")
             return False
 
 
@@ -228,7 +228,7 @@ class GoogleSheetsManager:
         try:
             worksheet = self.get_worksheet_by_name(spreadsheet_id, sheet_name)
             if not worksheet:
-                logger.error(f"Лист {sheet_name} не найден")
+                logger.error(f"Sheet {sheet_name} not found")
                 return False
 
             records = worksheet.get_all_records()
@@ -248,20 +248,20 @@ class GoogleSheetsManager:
             record_row = None
             current_record = None
             
-            logger.debug(f"Ищем запись с ID: '{record_id}' в {len(records)} записях")
+            logger.debug(f"Searching for record with ID: '{record_id}' in {len(records)} records")
             
             for i, row in enumerate(records, start=2):
                 row_id = str(row.get('ID', '')).strip()
-                logger.debug(f"Проверяем запись {i}: ID='{row_id}'")
+                logger.debug(f"Checking record {i}: ID='{row_id}'")
                 if row_id == record_id:
                     record_found = True
                     record_row = i
                     current_record = row
-                    logger.info(f"Найдена запись {record_id} в строке {record_row}")
+                    logger.info(f"Found record {record_id} in row {record_row}")
                     break
             
             if not record_found:
-                logger.error(f"Запись {record_id} не найдена для обновления. Доступные ID: {[str(r.get('ID', '')).strip() for r in records[:5]]}")
+                logger.error(f"Record {record_id} not found for update. Available IDs: {[str(r.get('ID', '')).strip() for r in records[:5]]}")
                 return False
             
             # Подготавливаем новое значение в зависимости от поля
@@ -273,27 +273,27 @@ class GoogleSheetsManager:
                     if parsed_date:
                         # Конвертируем в формат dd.mm.yy для записи в таблицу
                         formatted_value = parsed_date.strftime('%d.%m.%y')
-                        logger.info(f"Конвертировали дату '{new_value}' в '{formatted_value}'")
+                        logger.info(f"Converted date '{new_value}' to '{formatted_value}'")
                     else:
-                        logger.warning(f"Не удалось конвертировать дату: {new_value}")
+                        logger.warning(f"Failed to convert date: {new_value}")
                         formatted_value = str(new_value)
                 except Exception as e:
-                    logger.error(f"Ошибка конвертации даты {new_value}: {e}")
+                    logger.error(f"Error converting date {new_value}: {e}")
                     formatted_value = str(new_value)
             
             # Обновляем поле в записи
             headers = worksheet.row_values(1)
             if sheet_field not in headers:
-                logger.error(f"Поле {sheet_field} не найдено в заголовках: {headers}")
+                logger.error(f"Field {sheet_field} not found in headers: {headers}")
                 return False
             
             col_index = headers.index(sheet_field) + 1
             worksheet.update_cell(record_row, col_index, formatted_value)
-            logger.info(f"Запись {record_id} обновлена: поле '{sheet_field}' = '{formatted_value}'")
+            logger.info(f"Record {record_id} updated: field '{sheet_field}' = '{formatted_value}'")
             
             # Если обновили дату, проверяем нужна ли пересортировка
             if field == 'date':
-                logger.info(f"Проверяем необходимость пересортировки после обновления даты для записи {record_id}")
+                logger.info(f"Checking if resorting is needed after date update for record {record_id}")
                 
                 # Получаем обновленные записи для проверки порядка
                 updated_records = worksheet.get_all_records()
@@ -308,21 +308,21 @@ class GoogleSheetsManager:
                         current_date = safe_parse_date_or_none(date_str)
                         if current_date and prev_date and current_date < prev_date:
                             need_resort = True
-                            logger.info(f"Обнаружено нарушение порядка дат: {current_date} < {prev_date}")
+                            logger.info(f"Date order violation detected: {current_date} < {prev_date}")
                             break
                         prev_date = current_date
                 
                 # Пересортировка только если действительно нужна
                 if need_resort:
-                    logger.info(f"Выполняем пересортировку листа после обновления даты для записи {record_id}")
+                    logger.info(f"Performing sheet resorting after date update for record {record_id}")
                     self.sort_sheet_by_date(spreadsheet_id, sheet_name)
                 else:
-                    logger.info(f"Пересортировка не требуется - порядок дат корректен")
+                    logger.info(f"Resorting not required - date order is correct")
             
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка обновления записи {record_id} в Google Sheets: {e}", exc_info=True)
+            logger.error(f"Error updating record {record_id} in Google Sheets: {e}", exc_info=True)
             return False
 
     def delete_record_from_sheet(self, spreadsheet_id: str, sheet_name: str, record_id: str) -> bool:
@@ -337,13 +337,13 @@ class GoogleSheetsManager:
             for i, row in enumerate(records, start=2):
                 if str(row.get('ID', '')).strip() == record_id:
                     worksheet.delete_rows(i)
-                    logger.info(f"Запись {record_id} удалена из Google Sheets")
+                    logger.info(f"Record {record_id} deleted from Google Sheets")
                     return True
             
             return False
 
         except Exception as e:
-            logger.error(f"Ошибка удаления записи из Google Sheets: {e}")
+            logger.error(f"Error deleting record from Google Sheets: {e}")
             return False
 
     def sort_sheet_by_date(self, spreadsheet_id: str, sheet_name: str) -> bool:
@@ -351,13 +351,13 @@ class GoogleSheetsManager:
         try:
             worksheet = self.get_worksheet_by_name(spreadsheet_id, sheet_name)
             if not worksheet:
-                logger.error(f"Лист {sheet_name} не найден")
+                logger.error(f"Sheet {sheet_name} not found")
                 return False
 
             # Получаем все записи
             all_records = worksheet.get_all_records()
             if not all_records:
-                logger.info("Нет записей для сортировки")
+                logger.info("No records to sort")
                 return True
 
             # Сортируем записи по дате
@@ -394,17 +394,17 @@ class GoogleSheetsManager:
                 # Формат диапазона: A2:F{end_row}
                 range_name = f"A{start_row}:F{end_row}"
                 
-                logger.info(f"Обновляем диапазон {range_name} с {len(sorted_data)} записями")
+                logger.info(f"Updating range {range_name} with {len(sorted_data)} records")
                 worksheet.update(range_name, sorted_data, value_input_option='USER_ENTERED')
                 
-                logger.info(f"Лист {sheet_name} отсортирован по дате пакетным обновлением ({len(sorted_records)} записей)")
+                logger.info(f"Sheet {sheet_name} sorted by date with batch update ({len(sorted_records)} records)")
             else:
-                logger.warning("Нет данных для обновления после сортировки")
+                logger.warning("No data to update after sorting")
 
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка сортировки листа по дате: {e}", exc_info=True)
+            logger.error(f"Error sorting sheet by date: {e}", exc_info=True)
             return False
 
     def initialize_sheet_headers(self, spreadsheet_id: str, sheet_name: str) -> bool:
@@ -426,7 +426,7 @@ class GoogleSheetsManager:
 
         except Exception as e:
             # Log the error
-            logger.error(f"Ошибка инициализации заголовков: {e}")
+            logger.error(f"Error initializing headers: {e}")
             # Return False if there is an error
             return False
 

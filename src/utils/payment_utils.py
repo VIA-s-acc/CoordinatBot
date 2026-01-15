@@ -142,6 +142,6 @@ async def send_message_to_user(context, user_id: int, text: str, reply_markup=No
             reply_markup=reply_markup
         )
     except Exception as e:
-        logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
+        logger.error(f"Error sending message to user {user_id}: {e}")
         from ..utils.config_utils import send_to_log_chat
         await send_to_log_chat(context, f"Ошибка отправки сообщения пользователю {user_id}: {e}")

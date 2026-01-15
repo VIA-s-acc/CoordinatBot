@@ -25,7 +25,7 @@ class SheetsCache:
         # Пул потоков для асинхронной загрузки
         self._executor = ThreadPoolExecutor(max_workers=2)
         
-        logger.info(f"Инициализирован кеш листов с периодом обновления {cache_duration_minutes} минут")
+        logger.info(f"Sheets cache initialized with refresh period of {cache_duration_minutes} minutes")
     
     def _is_cache_expired(self, timestamp: datetime) -> bool:
         """Проверяет, устарел ли кеш"""
@@ -37,11 +37,11 @@ class SheetsCache:
             # Ленивый импорт для избежания циклических зависимостей
             from ..google_integration.sheets_manager import get_worksheets_info
             
-            logger.info(f"Загружаем данные о листах для {spreadsheet_id}")
+            logger.info(f"Loading sheets data for {spreadsheet_id}")
             return get_worksheets_info(spreadsheet_id)
             
         except Exception as e:
-            logger.error(f"Ошибка при загрузке данных о листах для {spreadsheet_id}: {e}")
+            logger.error(f"Error loading sheets data for {spreadsheet_id}: {e}")
             return [], "Ошибка загрузки"
     
     def _load_spreadsheets_sync(self) -> List[Dict]:
@@ -50,11 +50,11 @@ class SheetsCache:
             # Ленивый импорт для избежания циклических зависимостей
             from ..google_integration.sheets_manager import get_all_spreadsheets
             
-            logger.info("Загружаем список таблиц")
+            logger.info("Loading list of spreadsheets")
             return get_all_spreadsheets()
             
         except Exception as e:
-            logger.error(f"Ошибка при загрузке списка таблиц: {e}")
+            logger.error(f"Error loading list of spreadsheets: {e}")
             return []
     
     def get_sheets_info(self, spreadsheet_id: str, force_refresh: bool = False) -> Tuple[List[Dict], str]:
@@ -74,10 +74,10 @@ class SheetsCache:
                 sheets_info, spreadsheet_title, timestamp = self._sheets_cache[spreadsheet_id]
                 
                 if not self._is_cache_expired(timestamp):
-                    logger.debug(f"Возвращаем данные о листах из кеша для {spreadsheet_id}")
+                    logger.debug(f"Returning sheets data from cache for {spreadsheet_id}")
                     return sheets_info, spreadsheet_title
                 else:
-                    logger.debug(f"Кеш устарел для {spreadsheet_id}, обновляем...")
+                    logger.debug(f"Cache expired for {spreadsheet_id}, refreshing...")
             
             # Получаем данные из API с тайм-аутом
             try:
@@ -88,28 +88,28 @@ class SheetsCache:
                 # Сохраняем в кеш
                 self._sheets_cache[spreadsheet_id] = (sheets_info, spreadsheet_title, datetime.now())
                 
-                logger.info(f"Данные о листах кешированы для {spreadsheet_id}: {len(sheets_info)} листов")
+                logger.info(f"Sheets data cached for {spreadsheet_id}: {len(sheets_info)} sheets")
                 return sheets_info, spreadsheet_title
                 
             except FutureTimeoutError:
-                logger.warning(f"Timeout при загрузке данных о листах для {spreadsheet_id}")
+                logger.warning(f"Timeout while loading sheets data for {spreadsheet_id}")
                 
                 # Если есть устаревший кеш, возвращаем его
                 if spreadsheet_id in self._sheets_cache:
                     sheets_info, spreadsheet_title, _ = self._sheets_cache[spreadsheet_id]
-                    logger.warning(f"Возвращаем устаревший кеш для {spreadsheet_id}")
+                    logger.warning(f"Returning expired cache for {spreadsheet_id}")
                     return sheets_info, spreadsheet_title
                 
                 # Если кеша нет, возвращаем пустые данные
                 return [], "Таблица недоступна"
                 
             except Exception as e:
-                logger.error(f"Ошибка при загрузке данных о листах для {spreadsheet_id}: {e}")
+                logger.error(f"Error loading sheets data for {spreadsheet_id}: {e}")
                 
                 # Если есть устаревший кеш, возвращаем его
                 if spreadsheet_id in self._sheets_cache:
                     sheets_info, spreadsheet_title, _ = self._sheets_cache[spreadsheet_id]
-                    logger.warning(f"Возвращаем устаревший кеш для {spreadsheet_id}")
+                    logger.warning(f"Returning expired cache for {spreadsheet_id}")
                     return sheets_info, spreadsheet_title
                 
                 # Если кеша нет, возвращаем пустые данные
@@ -131,10 +131,10 @@ class SheetsCache:
                 spreadsheets, timestamp = self._spreadsheets_cache
                 
                 if not self._is_cache_expired(timestamp):
-                    logger.debug("Возвращаем список таблиц из кеша")
+                    logger.debug("Returning list of spreadsheets from cache")
                     return spreadsheets
                 else:
-                    logger.debug("Кеш списка таблиц устарел, обновляем...")
+                    logger.debug("Spreadsheets cache expired, refreshing...")
             
             # Получаем данные из API с тайм-аутом
             try:
@@ -145,28 +145,28 @@ class SheetsCache:
                 # Сохраняем в кеш
                 self._spreadsheets_cache = (spreadsheets, datetime.now())
                 
-                logger.info(f"Список таблиц кеширован: {len(spreadsheets)} таблиц")
+                logger.info(f"Spreadsheets list cached: {len(spreadsheets)} spreadsheets")
                 return spreadsheets
                 
             except FutureTimeoutError:
-                logger.warning("Timeout при загрузке списка таблиц")
+                logger.warning("Timeout while loading list of spreadsheets")
                 
                 # Если есть устаревший кеш, возвращаем его
                 if self._spreadsheets_cache:
                     spreadsheets, _ = self._spreadsheets_cache
-                    logger.warning("Возвращаем устаревший кеш списка таблиц")
+                    logger.warning("Returning expired spreadsheets cache")
                     return spreadsheets
                 
                 # Если кеша нет, возвращаем пустой список
                 return []
                 
             except Exception as e:
-                logger.error(f"Ошибка при загрузке списка таблиц: {e}")
+                logger.error(f"Error loading list of spreadsheets: {e}")
                 
                 # Если есть устаревший кеш, возвращаем его
                 if self._spreadsheets_cache:
                     spreadsheets, _ = self._spreadsheets_cache
-                    logger.warning("Возвращаем устаревший кеш списка таблиц")
+                    logger.warning("Returning expired spreadsheets cache")
                     return spreadsheets
                 
                 # Если кеша нет, возвращаем пустой список
@@ -177,26 +177,26 @@ class SheetsCache:
         with self.lock:
             if spreadsheet_id in self._sheets_cache:
                 del self._sheets_cache[spreadsheet_id]
-                logger.info(f"Кеш инвалидирован для {spreadsheet_id}")
+                logger.info(f"Cache invalidated for {spreadsheet_id}")
     
     def invalidate_spreadsheets_cache(self):
         """Инвалидирует кеш списка таблиц"""
         with self.lock:
             self._spreadsheets_cache = None
-            logger.info("Кеш списка таблиц инвалидирован")
+            logger.info("Spreadsheets cache invalidated")
     
     def clear_cache(self):
         """Очищает весь кеш"""
         with self.lock:
             self._sheets_cache.clear()
             self._spreadsheets_cache = None
-            logger.info("Весь кеш очищен")
+            logger.info("Entire cache cleared")
     
     def shutdown(self):
         """Корректно завершает работу кеша"""
         if hasattr(self, '_executor') and self._executor:
             self._executor.shutdown(wait=True)
-            logger.info("Кеш завершен корректно")
+            logger.info("Cache shutdown completed successfully")
     
     def get_cache_stats(self) -> Dict:
         """Возвращает статистику кеша"""

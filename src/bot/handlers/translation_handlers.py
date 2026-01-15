@@ -179,7 +179,7 @@ async def save_translation(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка сохранения перевода: {e}")
+        logger.error(f"Error saving translation: {e}")
         await update.message.reply_text(
             f"{_('translation.save_error', user_id)} {e}",
             reply_markup=InlineKeyboardMarkup([
@@ -235,7 +235,7 @@ async def list_translations(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка получения списка переводов: {e}")
+        logger.error(f"Error getting translations list: {e}")
         await query.edit_message_text(
             f"{_('translation.list_error', user_id)} {e}",
             reply_markup=InlineKeyboardMarkup([
@@ -270,7 +270,7 @@ async def reload_translations(update: Update, context: CallbackContext):
         )
         
     except Exception as e:
-        logger.error(f"Ошибка перезагрузки переводов: {e}")
+        logger.error(f"Error reloading translations: {e}")
         await query.edit_message_text(
             f"{_('translation.reload_error', user_id)} {e}",
             reply_markup=InlineKeyboardMarkup([

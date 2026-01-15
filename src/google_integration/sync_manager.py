@@ -1,13 +1,11 @@
 """
 Расширенный менеджер для Google Sheets с полной синхронизацией
 """
-import logging
 from typing import Dict, Optional
 from .sheets_manager import GoogleSheetsManager
 from ..database.database_manager import DatabaseManager, get_all_records
 from ..utils.date_utils import normalize_date
-
-logger = logging.getLogger(__name__)
+from ..config.settings import logger
 
 class SyncManager:
     """Менеджер синхронизации между Google Sheets и локальной БД"""
@@ -46,11 +44,11 @@ class SyncManager:
                             stats['processed_sheets'] += 1
                         
                 except Exception as e:
-                    logger.error(f"Ошибка синхронизации таблицы {spreadsheet_id}: {e}")
+                    logger.error(f"Error synchronizing spreadsheet {spreadsheet_id}: {e}")
                     stats['errors'] += 1
-                    
+
         except Exception as e:
-            logger.error(f"Ошибка полной синхронизации: {e}")
+            logger.error(f"Error during full synchronization: {e}")
             stats['errors'] += 1
         
         return stats
@@ -60,7 +58,7 @@ class SyncManager:
         try:
             worksheet = self.sheets.get_worksheet_by_name(spreadsheet_id, sheet_name)
             if not worksheet:
-                logger.warning(f"Лист {sheet_name} не найден")
+                logger.warning(f"Sheet {sheet_name} not found")
                 return
             
             # Получаем все записи с листа
@@ -76,12 +74,12 @@ class SyncManager:
                         record = self.sheet_row_to_record(row, spreadsheet_id, sheet_name)
                         if record and self.db.add_record(record):
                             stats['new_records'] += 1
-                            logger.info(f"Добавлена новая запись: {record_id}")
-                    
+                            logger.info(f"Added new record: {record_id}")
+
                     stats['synced_records'] += 1
-                    
+
         except Exception as e:
-            logger.error(f"Ошибка синхронизации листа {sheet_name}: {e}")
+            logger.error(f"Error synchronizing sheet {sheet_name}: {e}")
             stats['errors'] += 1
     
     def is_valid_record(self, row: Dict) -> bool:
@@ -121,7 +119,7 @@ class SyncManager:
             return record
             
         except Exception as e:
-            logger.error(f"Ошибка преобразования строки: {e}")
+            logger.error(f"Error converting row: {e}")
             return None
     
     async def sync_db_to_sheets(self) -> Dict[str, int]:
@@ -150,16 +148,16 @@ class SyncManager:
                             # Добавляем запись в Google Sheets
                             if self.sheets.add_record_to_sheet(spreadsheet_id, sheet_name, record):
                                 stats['synced_records'] += 1
-                                logger.info(f"Синхронизирована запись {record['id']} в Google Sheets")
-                    
+                                logger.info(f"Record {record['id']} synchronized to Google Sheets")
+
                     stats['processed_records'] += 1
-                    
+
                 except Exception as e:
-                    logger.error(f"Ошибка синхронизации записи {record.get('id')}: {e}")
+                    logger.error(f"Error synchronizing record {record.get('id')}: {e}")
                     stats['errors'] += 1
-                    
+
         except Exception as e:
-            logger.error(f"Ошибка синхронизации БД в Sheets: {e}")
+            logger.error(f"Error synchronizing DB to Sheets: {e}")
             stats['errors'] += 1
         
         return stats
@@ -179,7 +177,7 @@ class SyncManager:
             return False
             
         except Exception as e:
-            logger.error(f"Ошибка проверки существования записи: {e}")
+            logger.error(f"Error checking record existence: {e}")
             return False
     
     async def initialize_all_sheets(self) -> Dict[str, int]:
@@ -209,11 +207,11 @@ class SyncManager:
                             stats['processed_sheets'] += 1
                             
                 except Exception as e:
-                    logger.error(f"Ошибка инициализации таблицы {spreadsheet_id}: {e}")
+                    logger.error(f"Error initializing spreadsheet {spreadsheet_id}: {e}")
                     stats['errors'] += 1
-                    
+
         except Exception as e:
-            logger.error(f"Ошибка инициализации всех листов: {e}")
+            logger.error(f"Error initializing all sheets: {e}")
             stats['errors'] += 1
         
         return stats

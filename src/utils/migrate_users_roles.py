@@ -1,11 +1,9 @@
 """
 Миграция пользователей: присвоение ролей существующим пользователям
 """
-import logging
-from ..config.settings import ADMIN_IDS, SUPER_ADMIN_ID, UserRole
+from ..config.settings import ADMIN_IDS, SUPER_ADMIN_ID, UserRole, logger
 from .config_utils import load_users, save_users, is_user_allowed
 
-logger = logging.getLogger(__name__)
 
 
 def migrate_existing_users_to_roles() -> dict:
@@ -30,13 +28,13 @@ def migrate_existing_users_to_roles() -> dict:
     }
 
     try:
-        logger.info("🔄 Начинаем миграцию пользователей...")
+        logger.info("🔄 Starting user migration...")
 
         users = load_users()
         stats['total'] = len(users)
 
         if not users:
-            logger.info("📋 Нет пользователей для миграции")
+            logger.info("📋 No users to migrate")
             return stats
 
         for user_id_str, user_data in users.items():
@@ -45,7 +43,7 @@ def migrate_existing_users_to_roles() -> dict:
 
                 # Если роль уже есть, пропускаем
                 if user_data.get('role'):
-                    logger.info(f"Пользователь {user_id} уже имеет роль: {user_data['role']}")
+                    logger.info(f"User {user_id} already has a role: {user_data['role']}")
                     stats['skipped'] += 1
                     continue
 
@@ -55,20 +53,20 @@ def migrate_existing_users_to_roles() -> dict:
                 # Проверяем супер-админа
                 if SUPER_ADMIN_ID and user_id == SUPER_ADMIN_ID:
                     assigned_role = UserRole.SUPER_ADMIN
-                    logger.info(f"✨ Пользователь {user_id} назначен SUPER_ADMIN")
+                    logger.info(f"✨ User {user_id} assigned SUPER_ADMIN")
 
                 # Проверяем админа
                 elif user_id in ADMIN_IDS:
                     assigned_role = UserRole.ADMIN
-                    logger.info(f"👨‍💼 Пользователь {user_id} назначен ADMIN")
+                    logger.info(f"👨‍💼 User {user_id} assigned ADMIN")
 
                 # Проверяем разрешенных пользователей (работники)
                 elif is_user_allowed(user_id):
                     assigned_role = UserRole.WORKER
-                    logger.info(f"👷 Пользователь {user_id} назначен WORKER")
+                    logger.info(f"👷 User {user_id} assigned WORKER")
 
                 else:
-                    logger.warning(f"⚠️ Пользователь {user_id} не в allowed_users - роль не назначена")
+                    logger.warning(f"⚠️ User {user_id} not in allowed_users - role not assigned")
                     stats['skipped'] += 1
                     continue
 
@@ -85,31 +83,31 @@ def migrate_existing_users_to_roles() -> dict:
                     })
 
             except Exception as e:
-                logger.error(f"❌ Ошибка при миграции пользователя {user_id_str}: {e}")
+                logger.error(f"❌ Error migrating user {user_id_str}: {e}")
                 stats['errors'] += 1
 
         # Сохраняем изменения
         if stats['migrated'] > 0:
             if save_users(users):
-                logger.info(f"✅ Миграция завершена. Сохранено изменений: {stats['migrated']}")
+                logger.info(f"✅ Migration completed. Changes saved: {stats['migrated']}")
             else:
-                logger.error("❌ Ошибка сохранения данных пользователей")
+                logger.error("❌ Error saving user data")
                 stats['errors'] += 1
         else:
-            logger.info("📋 Нет пользователей для миграции")
+            logger.info("📋 No users to migrate")
 
-        # Логируем итоговую статистику
+        # Log final statistics
         logger.info(
-            f"\n📊 Статистика миграции:\n"
-            f"  Всего пользователей: {stats['total']}\n"
-            f"  Мигрировано: {stats['migrated']}\n"
-            f"  Пропущено: {stats['skipped']}\n"
-            f"  Ошибок: {stats['errors']}"
+            f"\n📊 Migration statistics:\n"
+            f"  Total users: {stats['total']}\n"
+            f"  Migrated: {stats['migrated']}\n"
+            f"  Skipped: {stats['skipped']}\n"
+            f"  Errors: {stats['errors']}"
         )
 
         # Выводим детали миграции
         if stats['details']:
-            logger.info("\n👥 Мигрированные пользователи:")
+            logger.info("\n👥 Migrated users:")
             for detail in stats['details']:
                 from .config_utils import get_role_display_name
                 role_display = get_role_display_name(detail['assigned_role'])
@@ -120,7 +118,7 @@ def migrate_existing_users_to_roles() -> dict:
         return stats
 
     except Exception as e:
-        logger.error(f"❌ Критическая ошибка при миграции: {e}", exc_info=True)
+        logger.error(f"❌ Critical migration error: {e}", exc_info=True)
         stats['errors'] += 1
         return stats
 
@@ -146,16 +144,16 @@ def check_migration_needed() -> bool:
 
         if users_without_roles:
             logger.info(
-                f"⚠️ Найдено {len(users_without_roles)} пользователей без ролей. "
-                f"Требуется миграция."
+                f"⚠️ Found {len(users_without_roles)} users without roles. "
+                f"Migration required."
             )
             return True
 
-        logger.info("✅ Все пользователи имеют роли")
+        logger.info("✅ All users have roles")
         return False
 
     except Exception as e:
-        logger.error(f"Ошибка проверки необходимости миграции: {e}")
+        logger.error(f"Error checking migration necessity: {e}")
         return False
 
 
@@ -166,24 +164,24 @@ def auto_migrate_if_needed():
     """
     try:
         if check_migration_needed():
-            logger.info("🔄 Запускаем автоматическую миграцию пользователей...")
+            logger.info("🔄 Starting automatic user migration...")
             stats = migrate_existing_users_to_roles()
 
             if stats['errors'] > 0:
                 logger.warning(
-                    f"⚠️ Миграция завершена с ошибками. "
-                    f"Мигрировано: {stats['migrated']}, Ошибок: {stats['errors']}"
+                    f"⚠️ Migration completed with errors. "
+                    f"Migrated: {stats['migrated']}, Errors: {stats['errors']}"
                 )
             else:
-                logger.info(f"✅ Автоматическая миграция успешно завершена. Мигрировано: {stats['migrated']}")
+                logger.info(f"✅ Automatic migration completed successfully. Migrated: {stats['migrated']}")
 
             return stats
         else:
-            logger.info("✅ Миграция не требуется")
+            logger.info("✅ Migration not required")
             return None
 
     except Exception as e:
-        logger.error(f"❌ Ошибка автоматической миграции: {e}", exc_info=True)
+        logger.error(f"❌ Automatic migration error: {e}", exc_info=True)
         return None
 
 

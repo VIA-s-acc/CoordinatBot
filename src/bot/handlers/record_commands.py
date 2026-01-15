@@ -1,14 +1,12 @@
 """
 Команды для работы с записями
 """
-import logging
 from telegram import Update
 from telegram.ext import CallbackContext
 from ...utils.config_utils import is_user_allowed
 from ...database.database_manager import search_records, get_all_records, get_record_from_db
 from ...utils.formatting import format_record_info
-
-logger = logging.getLogger(__name__)
+from ...config.settings import logger
 
 async def search_command(update: Update, context: CallbackContext):
     """Команда поиска записей"""

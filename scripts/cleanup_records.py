@@ -30,14 +30,14 @@ def is_numeric_id(value):
 def cleanup_google_sheets():
     """Удаляет записи с числовыми ID из Google Sheets"""
     if not ACTIVE_SPREADSHEET_ID:
-        logger.error("ACTIVE_SPREADSHEET_ID не установлен")
+        logger.error("ACTIVE_SPREADSHEET_ID not set")
         return 0
 
     manager = GoogleSheetsManager()
     spreadsheet = manager.open_sheet_by_id(ACTIVE_SPREADSHEET_ID)
 
     if not spreadsheet:
-        logger.error(f"Не удалось открыть таблицу: {ACTIVE_SPREADSHEET_ID}")
+        logger.error(f"Spreadsheet not found by ID: {ACTIVE_SPREADSHEET_ID}")
         return 0
 
     total_deleted = 0
@@ -47,7 +47,7 @@ def cleanup_google_sheets():
 
     for worksheet in worksheets:
         sheet_name = worksheet.title
-        logger.info(f"\nОбработка листа: {sheet_name}")
+        logger.info(f"Processing sheet: {sheet_name}")
 
         try:
             # Получаем все значения первой колонки (ID)
@@ -62,21 +62,21 @@ def cleanup_google_sheets():
                     rows_to_delete.append((i + 1, cell_value))  # (row_index, id_value)
 
             if rows_to_delete:
-                logger.info(f"  Найдено {len(rows_to_delete)} записей с числовыми ID для удаления")
+                logger.info(f"  Found {len(rows_to_delete)} records with numeric ID for deletion")
 
                 # Удаляем с конца
                 for row_index, id_value in sorted(rows_to_delete, reverse=True):
                     try:
                         worksheet.delete_rows(row_index)
                         total_deleted += 1
-                        logger.info(f"    Удалена строка {row_index} (ID: {id_value})")
+                        logger.info(f"    Deleted {row_index} (ID: {id_value})")
                     except Exception as e:
-                        logger.error(f"    Ошибка при удалении строки {row_index}: {e}")
+                        logger.error(f"    Deletion error {row_index}: {e}")
             else:
-                logger.info(f"  Нет записей с числовыми ID")
+                logger.info(f"  No numeric ID records found")
 
         except Exception as e:
-            logger.error(f"  Ошибка при обработке листа {sheet_name}: {e}")
+            logger.error(f"  Error processing sheet {sheet_name}: {e}")
 
     return total_deleted
 
@@ -84,7 +84,7 @@ def cleanup_google_sheets():
 def cleanup_database():
     """Удаляет записи с числовыми ID из SQLite БД (таблица records)"""
     if not os.path.exists(DATABASE_PATH):
-        logger.error(f"База данных не найдена: {DATABASE_PATH}")
+        logger.error(f"DB not found: {DATABASE_PATH}")
         return 0
 
     try:
@@ -101,7 +101,7 @@ def cleanup_database():
                 numeric_ids.append(record_id)
 
         if numeric_ids:
-            logger.info(f"\nНайдено {len(numeric_ids)} записей с числовыми ID в БД")
+            logger.info(f"\nFound {len(numeric_ids)} records with numeric IDs in DB")
 
             # Удаляем записи
             placeholders = ','.join(['?' for _ in numeric_ids])
@@ -109,16 +109,16 @@ def cleanup_database():
             deleted_count = cursor.rowcount
             conn.commit()
 
-            logger.info(f"Удалено {deleted_count} записей из БД")
+            logger.info(f"Deleted {deleted_count} from DB")
             conn.close()
             return deleted_count
         else:
-            logger.info("\nНет записей с числовыми ID в БД")
+            logger.info("\nMissing numeric records in DB")
             conn.close()
             return 0
 
     except Exception as e:
-        logger.error(f"Ошибка при работе с БД: {e}")
+        logger.error(f"DB error: {e}")
         return 0
 
 

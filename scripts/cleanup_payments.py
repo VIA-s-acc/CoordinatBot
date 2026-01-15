@@ -19,12 +19,12 @@ def cleanup_payments_sheets():
     manager = PaymentsSheetsManager()
 
     if not manager.spreadsheet_id:
-        logger.error("PAYMENTS_SPREADSHEET_ID не установлен")
+        logger.error("PAYMENTS_SPREADSHEET_ID not set")
         return
 
     spreadsheet = manager.sheets_manager.open_sheet_by_id(manager.spreadsheet_id)
     if not spreadsheet:
-        logger.error("Не удалось открыть таблицу платежей")
+        logger.error("Error opening spreadsheet")
         return
 
     total_deleted = 0
@@ -52,23 +52,23 @@ def cleanup_payments_sheets():
                         pass  # Это не числовой ID, возможно нормальная запись
 
             if rows_to_delete:
-                logger.info(f"Лист '{sheet_name}': найдено {len(rows_to_delete)} записей для удаления")
+                logger.info(f"Table '{sheet_name}': found {len(rows_to_delete)} records to delete")
 
                 # Удаляем строки с конца (чтобы не сбивать индексы)
                 for row_index in sorted(rows_to_delete, reverse=True):
                     try:
                         worksheet.delete_rows(row_index)
                         total_deleted += 1
-                        logger.info(f"  Удалена строка {row_index}")
+                        logger.info(f"  Deleted row {row_index}")
                     except Exception as e:
-                        logger.error(f"  Ошибка при удалении строки {row_index}: {e}")
+                        logger.error(f"  Row deletion error {row_index}: {e}")
             else:
-                logger.info(f"Лист '{sheet_name}': нет записей для удаления")
+                logger.info(f"Table '{sheet_name}': no records to delete")
 
         except Exception as e:
-            logger.error(f"Ошибка при обработке листа {sheet_name}: {e}")
+            logger.error(f"Error processing sheet {sheet_name}: {e}")
 
-    logger.info(f"\n✅ Очистка завершена. Всего удалено: {total_deleted} записей")
+    logger.info(f"\n✅ Cleanup finished, cleaned: {total_deleted} records")
 
 
 if __name__ == '__main__':
