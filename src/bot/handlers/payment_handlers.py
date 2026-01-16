@@ -381,7 +381,7 @@ async def get_payment_comment(update: Update, context: CallbackContext):
         # Для остальных используем глобальную таблицу
         user_settings = get_user_settings(user_id)
         spreadsheet_id = ACTIVE_SPREADSHEET_ID
-        sheet_name = user_settings.get('active_sheet_name')
+        sheet_name = " "
 
     # Добавляем платеж в базу данных
     # target_spreadsheet_id и target_sheet_name используются для двойной записи
@@ -406,11 +406,8 @@ async def get_payment_comment(update: Update, context: CallbackContext):
         logger.info(f"Sender: {sender_name} (ID: {sender_id})")
         logger.info(f"Creating expense record in table: {spreadsheet_id}, sheet: {sheet_name}")
 
-        # Создаем запись расхода в выбранной таблице
-        expense_record_created = False
-        expense_record_id = None
 
-        if spreadsheet_id and sheet_name:
+        if spreadsheet_id and sheet_name != " ":
             from ...database.database_manager import add_record_to_db
             from ...google_integration.async_sheets_worker import add_record_async
             import uuid
@@ -477,15 +474,6 @@ async def get_payment_comment(update: Update, context: CallbackContext):
             await send_message_to_user(context, recipient_id, payment_text)
             await send_message_to_user(context, sender_id, payment_text)
 
-        # Логируем в лог-чат с подробностями
-        log_message = (
-            f"💰 <b>Վճարում</b>\n\n"
-            f"📊 Փոխանցող: {sender_name}\n"
-            f"👤 Ստացող: {display_name}\n"
-            f"💵 Գումար: {int(amount):,.2f} դրամ\n"
-            f"📝 Նկարագրություն: {comment or 'Առանց մեկնաբանության'}\n"
-        )
-        
     else:
         await update.effective_chat.send_message("❌ Սխալ վճարումն ավելացնելիս:")
     
