@@ -482,47 +482,9 @@ async def get_payment_comment(update: Update, context: CallbackContext):
             f"💰 <b>Վճարում</b>\n\n"
             f"📊 Փոխանցող: {sender_name}\n"
             f"👤 Ստացող: {display_name}\n"
-            f"💵 Գումար: {int(amount)} դրամ\n"
+            f"💵 Գումար: {int(amount):,.2f} դրամ\n"
             f"📝 Նկարագրություն: {comment or 'Առանց մեկնաբանության'}\n"
-            f"📋 Թերթ: {sheet_name}\n"
         )
-
-        # Добавляем информацию о созданной записи расхода
-        if expense_record_created and expense_record_id:
-            log_message += f"🆔 ID: {expense_record_id}\n"
-            log_message += f"📝 Նկարագրություն: Վճար {display_name}-ին"
-            if comment:
-                log_message += f" ({comment})"
-
-        # Отправляем в report_chats
-        try:
-            from ...utils.config_utils import load_bot_config
-            config = load_bot_config()
-            report_chats = config.get('report_chats', {})
-
-            if report_chats:
-                for chat_id, settings in report_chats.items():
-                    try:
-                        # Проверяем, нужно ли фильтровать по листу
-                        configured_sheet = settings.get('sheet_name')
-
-                        # Если для чата настроен конкретный лист, отправляем только для этого листа
-                        if configured_sheet and configured_sheet != sheet_name:
-                            logger.info(f"Skipping payment report for chat {chat_id}: sheet '{sheet_name}' does not match '{configured_sheet}'")
-                            continue
-
-                        await context.bot.send_message(
-                            chat_id=chat_id,
-                            text=log_message,
-                            parse_mode='HTML'
-                        )
-                        logger.info(f"Payment message sent to report_chat {chat_id}")
-                    except Exception as e:
-                        logger.error(f"Error sending to report_chat {chat_id}: {e}")
-            else:
-                logger.warning("No configured report_chats in bot_config.json")
-        except Exception as e:
-            logger.error(f"Error sending to report_chats: {e}")
         
     else:
         await update.effective_chat.send_message("❌ Սխալ վճարումն ավելացնելիս:")
