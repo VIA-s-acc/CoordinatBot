@@ -569,7 +569,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
 
                 all_summaries.append({
                     'Աղյուսակ': spreadsheet_id,
-                    'Թեթր': sheet_name,
+                    'Թերթ': sheet_name,
                     'Ծախս': 0,  # Нет записей
                     "Վճար": total_paid,
                     'Մնացորդ': -total_paid  # Отрицательный баланс (переплата)
@@ -610,6 +610,8 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
                 all_payments_list = []
                 for (spreadsheet_id, sheet_name), payments in payments_by_sheet.items():
                     all_payments_list.extend(payments)
+                pym_nn = get_payments(user_display_name=display_name)
+                total_paid_all = sum(p['amount'] for p in pym_nn)
 
                 output_total = BytesIO()
                 with pd.ExcelWriter(output_total, engine='openpyxl') as writer:
@@ -619,7 +621,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
                         df_all_payments = df_all_payments[['amount', 'date_from', 'date_to', 'comment', 'created_at', 'spreadsheet_id', 'sheet_name']]
                         df_all_payments.to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
                 output_total.seek(0)
-
+                
                 await update.callback_query.message.reply_document(
                     document=output_total,
                     filename=f"{display_name}_ԸՆԴՀԱՆՈՒՐ_հաշվետվություն.xlsx",
@@ -692,7 +694,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
             total_left_sheet = df_amount_total - total_paid_sheet
             all_summaries.append({
                 'Աղյուսակ': spreadsheet_id,
-                'Թեթր': sheet_name,
+                'Թերթ': sheet_name,
                 'Ծախս': df_amount_total,
                 "Վճար": total_paid_sheet,  
                 'Մնացորդ': total_left_sheet
@@ -729,9 +731,19 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
             df_total = pd.DataFrame(all_summaries)
             total_expenses_all = df_total['Ծախս'].sum()
             total_paid_all = df_total['Վճար'].sum()
-            total_left_all = total_expenses_all - total_paid_all
             total_row = ['—'] * len(df_total.columns)
-
+            
+            all_payments = []
+            for (spreadsheet_id, sheet_name), records in sheets.items():
+                payments = get_payments(user_display_name=display_name, spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
+                if payments:
+                    # payments - это список словарей, добавляем их напрямую
+                    all_payments.extend(payments)
+            pym_nn = get_payments(user_display_name=display_name, sheet_name=" ")
+            all_payments.extend(pym_nn)
+            total_paid_all = sum(p.get('amount', 0) for p in all_payments)
+            total_left_all = total_expenses_all - total_paid_all
+            
             if 'Ծախս' in df_total.columns:
                 total_row[df_total.columns.get_loc('Ծախս')] = total_expenses_all
             if 'Վճար' in df_total.columns:
@@ -739,14 +751,7 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
             if 'Մնացորդ' in df_total.columns:
                 total_row[df_total.columns.get_loc('Մնացորդ')] = total_left_all
             df_total.loc['Իտոգ'] = total_row
-
-            all_payments = []
-            for (spreadsheet_id, sheet_name), records in sheets.items():
-                payments = get_payments(user_display_name=display_name, spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
-                if payments:
-                    # payments - это список словарей, добавляем их напрямую
-                    all_payments.extend(payments)
-
+            
             output_total = BytesIO()
             with pd.ExcelWriter(output_total, engine='openpyxl') as writer:
                 df_total.to_excel(writer, sheet_name='Ամփոփ', index=False)
@@ -761,7 +766,6 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
                     empty_all_payments.to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
 
             output_total.seek(0)
-
             await update.callback_query.message.reply_document(
                 document=output_total,
                 filename=f"{display_name}_ԸՆԴՀԱՆՈՒՐ_հաշվետվություն.xlsx",

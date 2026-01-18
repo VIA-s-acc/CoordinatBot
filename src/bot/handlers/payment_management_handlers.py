@@ -936,7 +936,7 @@ async def get_summary_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Получаем все платежи пользователя
     payments = get_payments(user_display_name=display_name)
-
+    
     if not payments:
         await query.edit_message_text(
             f"📊 *Սահմանային հաշվետվություն*\n\n"
