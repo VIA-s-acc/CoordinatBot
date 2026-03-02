@@ -14,7 +14,7 @@ from ..keyboards.inline_keyboards import (
     create_add_record_sheet_selection, create_expense_type_menu,
     create_entity_selection_menu, create_debt_type_menu
 )
-from ..states.conversation_states import DIRECTION, SUPPLIER_MANUAL
+from ..states.conversation_states import DIRECTION, DESCRIPTION, SUPPLIER_MANUAL
 from ...utils.config_utils import (
     is_user_allowed, get_user_settings, update_user_settings,
     get_entities_by_type, is_admin
@@ -41,6 +41,32 @@ def safe_parse_date(date_str: str, default_date: str = '2000-01-01') -> datetime
         return datetime.fromisoformat(date_str)
     except (ValueError, TypeError):
         return datetime.fromisoformat(default_date)
+
+
+def _is_entity_expense_mode(context: CallbackContext) -> bool:
+    return bool(
+        context.user_data.get('entity_expense_mode')
+        or context.user_data.get('selected_entity_name')
+        or (
+            context.user_data.get('selected_entity_type') is not None
+            and context.user_data.get('selected_entity_index') is not None
+        )
+    )
+
+
+def _resolve_entity_direction_or_fallback(context: CallbackContext):
+    direction = (
+        context.user_data.get('fixed_direction')
+        or context.user_data.get('selected_entity_name')
+        or context.user_data.get('selected_entity_sheet_name')
+        or context.user_data.get('selected_sheet_name')
+    )
+    if direction:
+        context.user_data['fixed_direction'] = direction
+        return direction
+    return "—"
+
+
 async def show_sheet_selection_for_add_record(update: Update, context: CallbackContext, record_type: str):
     """Показывает выбор листа для добавления записи"""
     query = update.callback_query
@@ -195,6 +221,13 @@ async def button_handler(update: Update, context: CallbackContext):
         context.user_data.pop('record', None)
         context.user_data.pop('messages_to_delete', None)
         context.user_data.pop('last_bot_message_id', None)
+        context.user_data.pop('entity_expense_mode', None)
+        context.user_data.pop('selected_entity_type', None)
+        context.user_data.pop('selected_entity_index', None)
+        context.user_data.pop('selected_entity_name', None)
+        context.user_data.pop('selected_entity_spreadsheet_id', None)
+        context.user_data.pop('selected_entity_sheet_name', None)
+        context.user_data.pop('fixed_direction', None)
         await query.edit_message_text(
             "📋 Հիմնական ընտրացանկ:",
             reply_markup=create_main_menu(user_id)
@@ -210,6 +243,13 @@ async def button_handler(update: Update, context: CallbackContext):
         return
 
     elif data == "expense_other":
+        context.user_data.pop('entity_expense_mode', None)
+        context.user_data.pop('selected_entity_type', None)
+        context.user_data.pop('selected_entity_index', None)
+        context.user_data.pop('selected_entity_name', None)
+        context.user_data.pop('selected_entity_spreadsheet_id', None)
+        context.user_data.pop('selected_entity_sheet_name', None)
+        context.user_data.pop('fixed_direction', None)
         await show_sheet_selection_for_add_record(update, context, "record")
         return
 
@@ -287,6 +327,9 @@ async def button_handler(update: Update, context: CallbackContext):
         context.user_data['selected_spreadsheet_id'] = ACTIVE_SPREADSHEET_ID
         context.user_data['selected_sheet_name'] = project_sheet
         context.user_data['fixed_direction'] = direction
+        context.user_data['selected_entity_type'] = entity_type
+        context.user_data['selected_entity_index'] = entity_index
+        context.user_data['entity_expense_mode'] = True
         context.user_data['operation_type'] = 'expense'
         context.user_data['coefficient'] = 1
 
@@ -965,6 +1008,16 @@ async def use_my_name(update: Update, context: CallbackContext):
         display_name = "Ֆ"
     
     context.user_data['record']['supplier'] = display_name
+
+    if _is_entity_expense_mode(context):
+        direction_value = _resolve_entity_direction_or_fallback(context)
+        context.user_data['record']['direction'] = direction_value
+        await query.edit_message_text(
+            f"✅ Մատակարար: {display_name}\n"
+            f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
+            parse_mode="HTML"
+        )
+        return DESCRIPTION
     
     await query.edit_message_text(
         f"✅ Մատակարար: {display_name}\n\n"
@@ -979,6 +1032,16 @@ async def use_firm_name(update: Update, context: CallbackContext):
     query = update.callback_query
     
     context.user_data['record']['supplier'] = "Ֆ"
+
+    if _is_entity_expense_mode(context):
+        direction_value = _resolve_entity_direction_or_fallback(context)
+        context.user_data['record']['direction'] = direction_value
+        await query.edit_message_text(
+            f"✅ Մատակարար: Ֆ\n"
+            f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
+            parse_mode="HTML"
+        )
+        return DESCRIPTION
     
     await query.edit_message_text(
         f"✅ Մատակարար: Ֆ\n\n"

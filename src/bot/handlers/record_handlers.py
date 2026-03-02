@@ -8,7 +8,7 @@ from telegram.ext import CallbackContext, ConversationHandler
 
 from ..states.conversation_states import DATE, SUPPLIER_CHOICE, DIRECTION, DESCRIPTION, AMOUNT, SUPPLIER_MANUAL
 from ..keyboards.inline_keyboards import create_main_menu
-from ...utils.config_utils import is_user_allowed, get_user_settings, update_user_settings, load_users, save_users
+from ...utils.config_utils import is_user_allowed, get_user_settings, update_user_settings, load_users, save_users, get_entity_by_index, get_entities_by_type
 from ...utils.formatting import format_record_info
 from ...database.database_manager import add_record_to_db
 from ...google_integration.async_sheets_worker import add_record_async
@@ -27,6 +27,65 @@ def _resolve_auto_direction(context: CallbackContext):
     if selected_entity_name:
         context.user_data['fixed_direction'] = selected_entity_name
         return selected_entity_name
+
+    selected_entity_type = context.user_data.get('selected_entity_type')
+    selected_entity_index = context.user_data.get('selected_entity_index')
+    if selected_entity_type is not None and selected_entity_index is not None:
+        try:
+            entity = get_entity_by_index(selected_entity_type, int(selected_entity_index))
+            if entity and entity.get('name'):
+                direction = entity.get('name')
+                context.user_data['selected_entity_name'] = direction
+                context.user_data['fixed_direction'] = direction
+                return direction
+        except Exception:
+            pass
+
+    return None
+
+
+def _is_entity_expense_mode(context: CallbackContext) -> bool:
+    """Определяет, что запись идет из ветки Ծախս -> Բրիգադ/Խանութ."""
+    return bool(
+        context.user_data.get('entity_expense_mode')
+        or context.user_data.get('selected_entity_name')
+        or (
+            context.user_data.get('selected_entity_type') is not None
+            and context.user_data.get('selected_entity_index') is not None
+        )
+    )
+
+
+def _resolve_entity_direction_or_fallback(context: CallbackContext):
+    """Возвращает направление для entity-mode; при необходимости использует fallback."""
+    direction = _resolve_auto_direction(context)
+    if direction:
+        return direction
+
+    direction = (
+        context.user_data.get('selected_entity_name')
+        or context.user_data.get('selected_entity_sheet_name')
+        or context.user_data.get('selected_sheet_name')
+    )
+    if direction:
+        context.user_data['fixed_direction'] = direction
+        return direction
+
+    return "—"
+
+
+def _infer_direction_from_entity_target(spreadsheet_id: str, sheet_name: str):
+    """Ищет направление сущности по паре spreadsheet_id + sheet_name."""
+    if not spreadsheet_id or not sheet_name:
+        return None
+
+    for entity_type in ('brigade', 'shop'):
+        entities = get_entities_by_type(entity_type)
+        for entity in entities:
+            entity_spreadsheet = entity.get('spreadsheet_id')
+            entity_sheet = entity.get('sheet_name') or entity.get('name')
+            if entity_spreadsheet == spreadsheet_id and entity_sheet == sheet_name:
+                return entity.get('name')
 
     return None
 
@@ -94,10 +153,16 @@ async def start_add_record(update: Update, context: CallbackContext):
     }
 
     # Для сценариев Бригада/Магазин фиксируем направление из выбранной сущности
-    if not context.user_data.get('fixed_direction'):
-        selected_entity_name = context.user_data.get('selected_entity_name')
-        if selected_entity_name:
-            context.user_data['fixed_direction'] = selected_entity_name
+    if _is_entity_expense_mode(context):
+        context.user_data['entity_expense_mode'] = True
+        direction_value = _resolve_entity_direction_or_fallback(context)
+        context.user_data['record']['direction'] = direction_value
+    elif not context.user_data.get('fixed_direction'):
+        inferred_direction = _infer_direction_from_entity_target(selected_spreadsheet_id, sheet_name)
+        if inferred_direction:
+            context.user_data['selected_entity_name'] = inferred_direction
+            context.user_data['fixed_direction'] = inferred_direction
+            context.user_data['record']['direction'] = inferred_direction
     
     # Сразу переходим к выбору поставщика
     display_name = user_settings.get('display_name')
@@ -302,11 +367,12 @@ async def use_my_name(update: Update, context: CallbackContext):
     
     context.user_data['record']['supplier'] = display_name
     fixed_direction = _resolve_auto_direction(context)
-    if fixed_direction:
-        context.user_data['record']['direction'] = fixed_direction
+    entity_expense_mode = _is_entity_expense_mode(context)
+    if fixed_direction or entity_expense_mode:
+        direction_value = _resolve_entity_direction_or_fallback(context)
+        context.user_data['record']['direction'] = direction_value
         await query.edit_message_text(
             f"✅ Մատակարար: {display_name}\n"
-            f"✅ Ուղղություն: {fixed_direction}\n\n"
             f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
             parse_mode="HTML"
         )
@@ -327,11 +393,12 @@ async def use_firm_name(update: Update, context: CallbackContext):
     
     context.user_data['record']['supplier'] = "Ֆ"
     fixed_direction = _resolve_auto_direction(context)
-    if fixed_direction:
-        context.user_data['record']['direction'] = fixed_direction
+    entity_expense_mode = _is_entity_expense_mode(context)
+    if fixed_direction or entity_expense_mode:
+        direction_value = _resolve_entity_direction_or_fallback(context)
+        context.user_data['record']['direction'] = direction_value
         await query.edit_message_text(
             f"✅ Մատակարար: Ֆ\n"
-            f"✅ Ուղղություն: {fixed_direction}\n\n"
             f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
             parse_mode="HTML"
         )
@@ -383,11 +450,12 @@ async def get_supplier_manual(update: Update, context: CallbackContext):
         except Exception:
             pass
     fixed_direction = _resolve_auto_direction(context)
-    if fixed_direction:
-        context.user_data['record']['direction'] = fixed_direction
+    entity_expense_mode = _is_entity_expense_mode(context)
+    if fixed_direction or entity_expense_mode:
+        direction_value = _resolve_entity_direction_or_fallback(context)
+        context.user_data['record']['direction'] = direction_value
         sent_msg = await update.message.reply_text(
             f"✅ Մատակարար: {supplier}\n"
-            f"✅ Ուղղություն: {fixed_direction}\n\n"
             f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
             parse_mode="HTML"
         )
@@ -428,7 +496,7 @@ async def get_direction(update: Update, context: CallbackContext):
             pass
 
         sent_msg = await update.message.reply_text(
-            f"✅ Ուղղություն: {fixed_direction}\n\n"
+            f"✅ Ուղղություն: {fixed_direction}\n"
             f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
             parse_mode="HTML"
         )
@@ -458,7 +526,6 @@ async def get_direction(update: Update, context: CallbackContext):
         except Exception:
             pass
     sent_msg = await update.message.reply_text(
-        f"✅ Ուղղություն: {direction}\n\n"
         f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
         parse_mode="HTML"
     )
