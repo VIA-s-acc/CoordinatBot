@@ -211,8 +211,8 @@ async def button_handler(update: Update, context: CallbackContext):
     elif data == "manual_input":
         return await manual_input(update, context)
     
-    # Редактирование записей (но НЕ платежей!)
-    elif data.startswith("edit_") and not data.startswith(("edit_payment_", "edit_record_")):
+    # Редактирование записей (но НЕ платежам!)
+    elif data.startswith("edit_") and not data.startswith("edit_payment_"):
         from .edit_handlers import handle_edit_button
         return await handle_edit_button(update, context)
 

@@ -19,6 +19,9 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+Skills
+.ai-factory.json
+.ai-factory
 .Python
 # Virtual environment
 venv/
