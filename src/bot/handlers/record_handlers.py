@@ -526,6 +526,7 @@ async def get_direction(update: Update, context: CallbackContext):
         except Exception:
             pass
     sent_msg = await update.message.reply_text(
+        f"✅ Ուղղություն: {direction}\n"
         f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
         parse_mode="HTML"
     )
