@@ -109,6 +109,26 @@ class GoogleSheetsManager:
             logger.error(f"Error getting worksheet {sheet_name}: {e}")
             return None
 
+    def ensure_worksheet_exists(self, spreadsheet_id: str, sheet_name: str):
+        """Возвращает лист по имени, а если его нет — создает автоматически."""
+        try:
+            sheet = self.open_sheet_by_id(spreadsheet_id)
+            if not sheet:
+                return None
+
+            try:
+                return sheet.worksheet(sheet_name)
+            except Exception:
+                logger.info(f"Worksheet '{sheet_name}' not found. Creating it automatically.")
+                worksheet = sheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
+                headers = ['ID', 'ամսաթիվ', 'մատակարար', 'ուղղություն', 'ծախսի բնութագիր', 'Արժեք']
+                self.ensure_headers(worksheet, headers)
+                logger.info(f"Worksheet '{sheet_name}' created in spreadsheet {spreadsheet_id}")
+                return worksheet
+        except Exception as e:
+            logger.error(f"Error ensuring worksheet '{sheet_name}' exists: {e}")
+            return None
+
     def get_spreadsheet_info(self, spreadsheet_id: str) -> Optional[Dict]:
         """Получает подробную информацию о спредшите"""
         try:
@@ -150,7 +170,7 @@ class GoogleSheetsManager:
         """Добавляет запись в Google Sheet с сортировкой по дате, используя пакетную вставку."""
         try:
             # Получаем рабочий лист
-            worksheet = self.get_worksheet_by_name(spreadsheet_id, sheet_name)
+            worksheet = self.ensure_worksheet_exists(spreadsheet_id, sheet_name)
             if not worksheet:
                 logger.error(f"Sheet {sheet_name} not found")
                 return False

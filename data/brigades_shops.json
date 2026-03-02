@@ -1,4 +1,11 @@
 {
-  "brigades": [],
+  "brigades": [
+    {
+      "name": "test",
+      "spreadsheet_id": "10i86z2s-NkmJkMwVvraqjVhJHMEeXKosrs2Uz7jwzcM",
+      "sheet_name": "test",
+      "owner_id": 7331677233
+    }
+  ],
   "shops": []
 }

@@ -31,14 +31,20 @@ def create_main_menu(user_id=None):
 
     if can_add_records(user_id):
         keyboard.extend([
-            [InlineKeyboardButton("Ծախս", callback_data="expense_menu")],
-            [InlineKeyboardButton("Պարտք", callback_data="debt_menu")],
-            [InlineKeyboardButton("Պարտքի մարում", callback_data="repayment_menu")],
-            [InlineKeyboardButton("Վճարներ", callback_data="payments_menu")],
+            [
+                InlineKeyboardButton("💸 Ծախս", callback_data="expense_menu"),
+            ],
+            [
+                InlineKeyboardButton("🧾 Պարտք", callback_data="debt_menu"),
+                InlineKeyboardButton("💳 Պարտքի մարում", callback_data="repayment_menu"),
+            ],
+            [
+                InlineKeyboardButton("💰 Վճարներ", callback_data="payments_menu"),
+            ],
         ])
 
     if can_view_payments(user_id) and not can_add_records(user_id):
-        keyboard.append([InlineKeyboardButton("Վճարներ", callback_data="my_payments")])
+        keyboard.append([InlineKeyboardButton("💰 Վճարներ", callback_data="my_payments")])
 
     # Супер-админ: управление ролями
     if is_super_admin(user_id):
@@ -68,9 +74,11 @@ def create_main_menu(user_id=None):
 def create_expense_type_menu():
     """Подменю раздела расходов: Бригада / Магазин / Иное"""
     keyboard = [
-        [InlineKeyboardButton("Բրիգադ", callback_data="expense_entity_type_brigade")],
-        [InlineKeyboardButton("Խանութ", callback_data="expense_entity_type_shop")],
-        [InlineKeyboardButton("Այլ", callback_data="expense_other")],
+        [
+            InlineKeyboardButton("🏗️ Բրիգադ", callback_data="expense_entity_type_brigade"),
+            InlineKeyboardButton("🏪 Խանութ", callback_data="expense_entity_type_shop"),
+        ],
+        [InlineKeyboardButton("📦 Այլ", callback_data="expense_other")],
         [InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -79,9 +87,16 @@ def create_expense_type_menu():
 def create_entity_selection_menu(entities, prefix: str, back_callback: str = "expense_menu"):
     """Универсальная клавиатура выбора сущности из конфигурации"""
     keyboard = []
+    row = []
     for idx, entity in enumerate(entities):
         title = entity.get('name') or f"Entity {idx + 1}"
-        keyboard.append([InlineKeyboardButton(title, callback_data=f"{prefix}_{idx}")])
+        row.append(InlineKeyboardButton(f"📌 {title}", callback_data=f"{prefix}_{idx}"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+
+    if row:
+        keyboard.append(row)
 
     keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data=back_callback)])
     return InlineKeyboardMarkup(keyboard)
@@ -90,8 +105,10 @@ def create_entity_selection_menu(entities, prefix: str, back_callback: str = "ex
 def create_debt_type_menu(operation: str):
     """Меню выбора типа сущности для долга/погашения"""
     keyboard = [
-        [InlineKeyboardButton("Բրիգադ", callback_data=f"debt_entity_type_{operation}_brigade")],
-        [InlineKeyboardButton("Խանութ", callback_data=f"debt_entity_type_{operation}_shop")],
+        [
+            InlineKeyboardButton("🏗️ Բրիգադ", callback_data=f"debt_entity_type_{operation}_brigade"),
+            InlineKeyboardButton("🏪 Խանութ", callback_data=f"debt_entity_type_{operation}_shop"),
+        ],
         [InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -189,8 +206,10 @@ def create_settings_menu(user_id=None):
 def create_add_record_menu():
     """Создает меню выбора типа добавления записи"""
     keyboard = [
-        [InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record_select_sheet")],
-        [InlineKeyboardButton("➕ Ավելացնել Բացթողում", callback_data="add_skip_record_select_sheet")],
+        [
+            InlineKeyboardButton("➕ Ավելացնել գրառում", callback_data="add_record_select_sheet"),
+            InlineKeyboardButton("🧾 Ավելացնել Բացթողում", callback_data="add_skip_record_select_sheet"),
+        ],
         [InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -297,8 +316,10 @@ def create_final_sheet_selection_keyboard(sheets):
 def create_payment_menu(display_name):
     """Создает меню действий с платежами для выбранного работника"""
     keyboard = [
-        [InlineKeyboardButton("➕ Ավելացնել վճարում", callback_data=f"add_payment_{display_name}")],
-        [InlineKeyboardButton("📊 Ստանալ սահմանի հաշվետվություն", callback_data=f"get_payment_report_{display_name}")],
+        [
+            InlineKeyboardButton("➕ Ավելացնել վճարում", callback_data=f"add_payment_{display_name}"),
+            InlineKeyboardButton("📊 Սահմանային հաշվետվություն", callback_data=f"get_payment_report_{display_name}"),
+        ],
         [InlineKeyboardButton("⬅️ Հետ", callback_data="pay_menu")]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -306,8 +327,10 @@ def create_payment_menu(display_name):
 def create_payment_actions_keyboard(display_name):
     """Создает клавиатуру действий с платежами"""
     keyboard = [
-        [InlineKeyboardButton("➕ Ավելացնել վճարում", callback_data=f"add_payment_{display_name}")],
-        [InlineKeyboardButton("📊 Ստանալ սահմանի հաշվետվություն", callback_data=f"get_payment_report_{display_name}")],
+        [
+            InlineKeyboardButton("➕ Ավելացնել վճարում", callback_data=f"add_payment_{display_name}"),
+            InlineKeyboardButton("📊 Սահմանային հաշվետվություն", callback_data=f"get_payment_report_{display_name}"),
+        ],
         [InlineKeyboardButton("⬅️ Հետ", callback_data="pay_menu")]
     ]
     return InlineKeyboardMarkup(keyboard)

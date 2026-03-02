@@ -1,7 +1,7 @@
 {
   "714158870": {
     "active_spreadsheet_id": "1rzxsSFsu6hqFTJhP4PlS8yGBW5pC8_FxPuJrgr5fsxA",
-    "active_sheet_name": "Արփի ԱՅԲ",
+    "active_sheet_name": "test",
     "display_name": "Գեորգի",
     "reports": [],
     "role": "super_admin"
@@ -1037,7 +1037,7 @@
   },
   "7331677233": {
     "active_sheet_name": null,
-    "display_name": null,
+    "display_name": "TESTUSER",
     "role": "worker"
   }
 }

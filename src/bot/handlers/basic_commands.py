@@ -177,6 +177,24 @@ async def help_command(update: Update, context: CallbackContext):
         reply_markup=create_back_to_menu_keyboard()
     )
 
+
+async def cancel_command(update: Update, context: CallbackContext):
+    """Глобальная отмена активного сценария."""
+    user_id = update.effective_user.id
+    if not is_user_allowed(user_id):
+        return
+
+    context.user_data.pop('debt_flow', None)
+    context.user_data.pop('pay_step', None)
+    context.user_data.pop('record', None)
+    context.user_data.pop('messages_to_delete', None)
+    context.user_data.pop('last_bot_message_id', None)
+
+    await update.message.reply_text(
+        "❌ Գործողությունը չեղարկվեց:",
+        reply_markup=create_main_menu(user_id)
+    )
+
 async def message_handler(update: Update, context: CallbackContext):
     """Обработчик обычных сообщений"""
     user_id = update.effective_user.id

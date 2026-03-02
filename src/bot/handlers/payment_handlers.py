@@ -23,6 +23,71 @@ from ..handlers.translation_handlers import _
 from telegram.constants import ChatAction
 
 
+def calculate_summary_balance_for_user(display_name: str) -> float:
+    """Возвращает остаток пользователя по той же логике, что используется в сводном отчете."""
+    db_records = get_all_records()
+    filtered_records = []
+
+    for record in db_records:
+        if record.get('amount', 0) == 0:
+            continue
+
+        supplier = record['supplier'].strip() if 'supplier' in record else ""
+        if supplier.lower() != display_name.lower():
+            continue
+
+        try:
+            record['date'] = normalize_date(record['date'])
+        except Exception:
+            continue
+
+        try:
+            record_date = safe_parse_date_or_none(record['date'])
+            if record_date is None:
+                continue
+            record['date'] = record_date
+        except Exception:
+            continue
+
+        if record['supplier'] == "Նարեկ":
+            start_date = datetime.strptime("2025-05-10", '%Y-%m-%d').date()
+        else:
+            start_date = datetime.strptime("2024-12-05", '%Y-%m-%d').date()
+
+        if record_date >= start_date:
+            filtered_records.append(record)
+
+    if not filtered_records:
+        total_paid_all = sum(float(p.get('amount', 0) or 0) for p in get_payments(user_display_name=display_name))
+        return -total_paid_all
+
+    sheets = {}
+    for rec in filtered_records:
+        spreadsheet_id = rec.get('spreadsheet_id', '—')
+        sheet_name = rec.get('sheet_name', '—')
+        key = (spreadsheet_id, sheet_name)
+        sheets.setdefault(key, []).append(rec)
+
+    total_expenses_all = 0.0
+    for records in sheets.values():
+        total_expenses_all += sum(float(r.get('amount', 0) or 0) for r in records)
+
+    all_payments = []
+    for (spreadsheet_id, sheet_name), _records in sheets.items():
+        payments = get_payments(
+            user_display_name=display_name,
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name
+        )
+        if payments:
+            all_payments.extend(payments)
+
+    all_payments.extend(get_payments(user_display_name=display_name, sheet_name=" "))
+    total_paid_all = sum(float(p.get('amount', 0) or 0) for p in all_payments)
+
+    return total_expenses_all - total_paid_all
+
+
 def _drop_service_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Удаляет служебные поля из отчетных таблиц."""
     service_columns = ['date', 'to', 'date_from', 'spreadsheet_id', 'sheet_name']

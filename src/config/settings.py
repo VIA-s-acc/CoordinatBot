@@ -67,6 +67,12 @@ PAYMENTS_SPREADSHEET_ID = os.getenv('PAYMENTS_SPREADSHEET_ID')
 # ID основной таблицы Google Sheets
 ACTIVE_SPREADSHEET_ID = os.getenv('ACTIVE_SPREADSHEET_ID')
 
+# Дефолтные таблицы для сущностей (если не указаны вручную)
+DEFAULT_BRIGADE_SPREADSHEET_ID = os.getenv('DEFAULT_BRIGADE_SPREADSHEET_ID')
+DEFAULT_SHOP_SPREADSHEET_ID = os.getenv('DEFAULT_SHOP_SPREADSHEET_ID')
+DEFAULT_BRIGADE_SHEET_NAME = os.getenv('DEFAULT_BRIGADE_SHEET_NAME')
+DEFAULT_SHOP_SHEET_NAME = os.getenv('DEFAULT_SHOP_SHEET_NAME')
+
 # ID чата для автоматических бэкапов
 BACKUP_CHAT_ID = os.getenv('BACKUP_CHAT_ID')
 if BACKUP_CHAT_ID and BACKUP_CHAT_ID.strip():

@@ -9,14 +9,15 @@ from telegram.ext import ContextTypes, ConversationHandler
 from ...config.settings import UserRole, logger
 from ...utils.config_utils import (
     is_admin, is_super_admin, get_user_role, get_users_by_role,
-    get_user_display_name, load_users
+    get_user_display_name, load_users, get_entities_by_type, get_entity_by_index
 )
 from ...database.database_manager import (
     get_payments, delete_payment, update_payment,
     get_role_by_display_name, get_all_records
 )
-from ...utils.date_utils import normalize_date, safe_parse_date_or_none
-from datetime import datetime
+import pandas as pd
+from io import BytesIO
+from .payment_handlers import calculate_summary_balance_for_user
 
 
 # Conversation states
@@ -43,52 +44,9 @@ def get_user_role_by_display_name(display_name: str) -> str:
     return UserRole.WORKER
 
 
-def _calculate_worker_expenses(display_name: str, all_records):
-    """Считает расходы сотрудника по логике summary-отчета."""
-    unique_records = {}
-
-    for record in all_records:
-        if float(record.get('amount', 0) or 0) == 0:
-            continue
-
-        supplier = str(record.get('supplier', '')).strip()
-        if supplier.lower() != display_name.lower():
-            continue
-
-        record_id = record.get('id')
-        if not record_id:
-            continue
-
-        existing = unique_records.get(record_id)
-        if existing:
-            existing_updated = existing.get('updated_at', '')
-            current_updated = record.get('updated_at', '')
-            if str(current_updated) > str(existing_updated):
-                unique_records[record_id] = dict(record)
-        else:
-            unique_records[record_id] = dict(record)
-
-    total_expenses = 0.0
-    for record in unique_records.values():
-        date_raw = str(record.get('date', '') or '')
-        try:
-            normalized = normalize_date(date_raw)
-        except Exception:
-            continue
-
-        record_date = safe_parse_date_or_none(normalized)
-        if record_date is None:
-            continue
-
-        if record.get('supplier') == "Նարեկ":
-            start_date = datetime.strptime("2025-05-10", "%Y-%m-%d").date()
-        else:
-            start_date = datetime.strptime("2024-12-05", "%Y-%m-%d").date()
-
-        if record_date >= start_date:
-            total_expenses += float(record.get('amount', 0) or 0)
-
-    return total_expenses
+def _calculate_worker_balance_by_summary_logic(display_name: str, _all_records):
+    """Считает баланс работника строго по общей функции сводного отчета."""
+    return calculate_summary_balance_for_user(display_name)
 
 
 async def payments_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -120,9 +78,7 @@ async def payments_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         display_name = get_user_display_name(user_id_int)
         if display_name:
             user_payments = get_payments(user_display_name=display_name)
-            total_received = sum(p['amount'] for p in user_payments)
-            total_expenses = _calculate_worker_expenses(display_name, all_records)
-            balance = total_expenses - total_received
+            balance = _calculate_worker_balance_by_summary_logic(display_name, all_records)
             workers_with_payments.append({
                 'name': display_name,
                 'count': len(user_payments),
@@ -140,6 +96,11 @@ async def payments_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Формируем клавиатуру
     keyboard = []
+
+    keyboard.append([
+        InlineKeyboardButton("🏗️ Բրիգադ", callback_data="payments_entity_menu_brigade"),
+        InlineKeyboardButton("🏪 Խանութ", callback_data="payments_entity_menu_shop"),
+    ])
 
     # Кнопки для каждого воркера
     for worker in current_workers:
@@ -163,8 +124,10 @@ async def payments_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Кнопки для вторичных и клиентов
     keyboard.extend([
-        [InlineKeyboardButton("👁 Երկրորդային", callback_data="payments_secondary_list")],
-        [InlineKeyboardButton("📥 Ստացած (Կլիենտներ)", callback_data="payments_clients_list")],
+        [
+            InlineKeyboardButton("👁 Երկրորդային", callback_data="payments_secondary_list"),
+            InlineKeyboardButton("📥 Ստացած", callback_data="payments_clients_list"),
+        ],
         [InlineKeyboardButton("🔙 Հետ", callback_data="back_to_menu")]
     ])
 
@@ -178,6 +141,157 @@ async def payments_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         message,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
+    )
+
+
+async def payments_entity_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает список сущностей (Бригада/Магазин) для формирования отчета."""
+    query = update.callback_query
+    user_id = update.effective_user.id
+
+    if not is_admin(user_id):
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
+        return
+
+    await query.answer()
+
+    entity_type = "brigade" if query.data.endswith("brigade") else "shop"
+    entities = get_entities_by_type(entity_type)
+
+    if not entities:
+        await query.edit_message_text(
+            "📋 Սուբյեկտների ցուցակը դատարկ է:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Հետ", callback_data="pay_menu")]])
+        )
+        return
+
+    title = "Բրիգադ" if entity_type == "brigade" else "Խանութ"
+    keyboard = []
+    for idx, entity in enumerate(entities):
+        name = entity.get('name') or f"{title} {idx + 1}"
+        keyboard.append([
+            InlineKeyboardButton(f"📊 {name}", callback_data=f"payments_entity_report_{entity_type}_{idx}")
+        ])
+
+    keyboard.append([InlineKeyboardButton("🔙 Հետ", callback_data="pay_menu")])
+
+    await query.edit_message_text(
+        f"📂 *{title} — հաշվետվություններ*\n\nԸնտրեք սուբյեկտը:",
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def send_entity_payments_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Формирует детальный Excel и краткий отчет по выбранной сущности."""
+    query = update.callback_query
+    user_id = update.effective_user.id
+
+    if not is_admin(user_id):
+        await query.answer("⛔ Դուք մուտք չունեք այս գործառույթին:", show_alert=True)
+        return
+
+    await query.answer()
+
+    payload = query.data.replace("payments_entity_report_", "", 1)
+    entity_type, index_text = payload.rsplit("_", 1)
+
+    try:
+        entity_index = int(index_text)
+    except ValueError:
+        await query.edit_message_text("❌ Սխալ ընտրություն")
+        return
+
+    entity = get_entity_by_index(entity_type, entity_index)
+    if not entity:
+        await query.edit_message_text("❌ Սուբյեկտը չի գտնվել")
+        return
+
+    spreadsheet_id = entity.get('spreadsheet_id')
+    sheet_name = entity.get('sheet_name') or entity.get('name')
+    entity_name = entity.get('name', '—')
+
+    all_records = get_all_records()
+    records = [
+        r for r in all_records
+        if r.get('spreadsheet_id') == spreadsheet_id and r.get('sheet_name') == sheet_name
+    ]
+    payments = get_payments(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
+
+    total_records = len(records)
+    total_payments = len(payments)
+    total_expense = sum(float(r.get('amount', 0) or 0) for r in records)
+    total_paid = sum(float(p.get('amount', 0) or 0) for p in payments)
+    balance = total_expense - total_paid
+
+    df_summary = pd.DataFrame([{
+        'Սուբյեկտ': entity_name,
+        'Տեսակ': 'Բրիգադ' if entity_type == 'brigade' else 'Խանութ',
+        'Գրառումներ': total_records,
+        'Վճարումներ': total_payments,
+        'Ընդհանուր ծախս': total_expense,
+        'Ընդհանուր վճար': total_paid,
+        'Մնացորդ': balance,
+    }])
+
+    df_records = pd.DataFrame(records) if records else pd.DataFrame(columns=[
+        'date', 'supplier', 'direction', 'description', 'amount'
+    ])
+    df_payments = pd.DataFrame(payments) if payments else pd.DataFrame(columns=[
+        'user_display_name', 'amount', 'date_from', 'date_to', 'comment'
+    ])
+
+    record_columns = ['date', 'supplier', 'direction', 'description', 'amount']
+    payment_columns = ['user_display_name', 'amount', 'date_from', 'date_to', 'comment']
+
+    for col in record_columns:
+        if col not in df_records.columns:
+            df_records[col] = ''
+    df_records = df_records[record_columns].rename(columns={
+        'date': 'Ամսաթիվ',
+        'supplier': 'Մատակարար',
+        'direction': 'Ուղղություն',
+        'description': 'Նկարագրություն',
+        'amount': 'Գումար',
+    })
+
+    for col in payment_columns:
+        if col not in df_payments.columns:
+            df_payments[col] = ''
+    df_payments = df_payments[payment_columns].rename(columns={
+        'user_display_name': 'Օգտատեր',
+        'amount': 'Գումար',
+        'date_from': 'Սկիզբ',
+        'date_to': 'Ավարտ',
+        'comment': 'Մեկնաբանություն',
+    })
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_summary.to_excel(writer, sheet_name='Ամփոփ', index=False)
+        df_records.to_excel(writer, sheet_name='Գրառումներ', index=False)
+        if total_payments > 0:
+            df_payments.to_excel(writer, sheet_name='Վճարումներ', index=False)
+    output.seek(0)
+
+    await query.message.reply_document(
+        document=output,
+        filename=f"{entity_name}_հաշվետվություն.xlsx",
+        caption=(
+            f"📊 <b>Հաշվետվություն՝ {entity_name}</b>\n\n"
+            f"🧾 Գրառումներ: {total_records}\n"
+            f"💵 Վճարումներ: {total_payments}\n"
+            f"💰 Ընդհանուր ծախս: {total_expense:,.0f} դրամ\n"
+            f"💳 Ընդհանուր վճար: {total_paid:,.0f} դրամ\n"
+            f"📉 Մնացորդ: {balance:,.0f} դրամ"
+        ),
+        parse_mode='HTML'
+    )
+
+    back_callback = "payments_entity_menu_brigade" if entity_type == "brigade" else "payments_entity_menu_shop"
+    await query.edit_message_text(
+        f"✅ {entity_name} սուբյեկտի հաշվետվությունը ուղարկված է",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Հետ", callback_data=back_callback)]])
     )
 
 

@@ -100,6 +100,48 @@ async def show_sheet_selection_for_add_record(update: Update, context: CallbackC
         )
 
 
+async def _show_project_sheet_selection(update: Update, context: CallbackContext, mode: str, operation: str = None, entity_type: str = None, entity_index: int = None):
+    """Показывает выбор проектного листа для операций по сущностям."""
+    query = update.callback_query
+
+    if not ACTIVE_SPREADSHEET_ID:
+        await query.edit_message_text(
+            "❌ ACTIVE_SPREADSHEET_ID не настроен. Невозможно выбрать проектный лист.",
+            reply_markup=create_back_to_menu_keyboard()
+        )
+        return
+
+    sheets_info, spreadsheet_title = get_cached_sheets_info(ACTIVE_SPREADSHEET_ID)
+    if not sheets_info:
+        await query.edit_message_text(
+            "❌ Не удалось получить список проектных листов.",
+            reply_markup=create_back_to_menu_keyboard()
+        )
+        return
+
+    context.user_data['project_sheet_options'] = [s.get('title', '') for s in sheets_info if s.get('title')]
+    options = context.user_data['project_sheet_options']
+
+    keyboard = []
+    for idx, title in enumerate(options):
+        if mode == "expense":
+            callback_data = f"expense_project_select_{entity_type}_{entity_index}_{idx}"
+        else:
+            callback_data = f"debt_project_select_{operation}_{entity_type}_{entity_index}_{idx}"
+        keyboard.append([InlineKeyboardButton(f"📋 {title}", callback_data=callback_data)])
+
+    back_cb = "expense_menu" if mode == "expense" else "back_to_menu"
+    keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data=back_cb)])
+
+    title_text = "Ծախս" if mode == "expense" else ("Պարտք" if operation == "debt" else "Պարտքի մարում")
+    await query.edit_message_text(
+        f"📂 {title_text}\n"
+        f"📊 Աղյուսակ: {spreadsheet_title}\n\n"
+        f"Ընտրեք նախագծի թերթիկը:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
 async def button_handler(update: Update, context: CallbackContext):
     """Основной обработчик кнопок"""
     query = update.callback_query
@@ -148,6 +190,11 @@ async def button_handler(update: Update, context: CallbackContext):
     
     # Главное меню - завершаем любой активный ConversationHandler
     if data == "back_to_menu" or data == "main_menu":
+        context.user_data.pop('debt_flow', None)
+        context.user_data.pop('pay_step', None)
+        context.user_data.pop('record', None)
+        context.user_data.pop('messages_to_delete', None)
+        context.user_data.pop('last_bot_message_id', None)
         await query.edit_message_text(
             "📋 Հիմնական ընտրացանկ:",
             reply_markup=create_main_menu(user_id)
@@ -203,16 +250,53 @@ async def button_handler(update: Update, context: CallbackContext):
             await query.edit_message_text("❌ Ուղղության համար չի լրացվել spreadsheet_id/sheet_name.", reply_markup=create_back_to_menu_keyboard())
             return
 
-        context.user_data['selected_spreadsheet_id'] = spreadsheet_id
-        context.user_data['selected_sheet_name'] = sheet_name
+        context.user_data['selected_entity_name'] = direction
+        context.user_data['selected_entity_spreadsheet_id'] = spreadsheet_id
+        context.user_data['selected_entity_sheet_name'] = sheet_name
+
+        await _show_project_sheet_selection(
+            update,
+            context,
+            mode="expense",
+            entity_type=entity_type,
+            entity_index=entity_index
+        )
+        return
+
+    elif data.startswith("expense_project_select_"):
+        # Формат: expense_project_select_<entity_type>_<entity_index>_<sheet_index>
+        payload = data.replace("expense_project_select_", "", 1)
+        entity_type, entity_index_text, sheet_index_text = payload.rsplit("_", 2)
+        entity_index = int(entity_index_text)
+        sheet_index = int(sheet_index_text)
+
+        entities = get_entities_by_type(entity_type)
+        if entity_index < 0 or entity_index >= len(entities):
+            await query.edit_message_text("❌ Ուղղությունը չի գտնվել.", reply_markup=create_back_to_menu_keyboard())
+            return
+
+        project_sheet_options = context.user_data.get('project_sheet_options', [])
+        if sheet_index < 0 or sheet_index >= len(project_sheet_options):
+            await query.edit_message_text("❌ Նախագծի թերթիկը չի գտնվել.", reply_markup=create_back_to_menu_keyboard())
+            return
+
+        entity = entities[entity_index]
+        direction = entity.get('name')
+        project_sheet = project_sheet_options[sheet_index]
+
+        context.user_data['selected_spreadsheet_id'] = ACTIVE_SPREADSHEET_ID
+        context.user_data['selected_sheet_name'] = project_sheet
         context.user_data['fixed_direction'] = direction
         context.user_data['operation_type'] = 'expense'
         context.user_data['coefficient'] = 1
 
-        keyboard = [[InlineKeyboardButton("➡️ Продолжить", callback_data=f"add_record_sheet_{sheet_name}")]]
+        keyboard = [
+            [InlineKeyboardButton("➡️ Շարունակել", callback_data=f"add_record_sheet_{project_sheet}")],
+            [InlineKeyboardButton("❌ Չեղարկել", callback_data="expense_menu")]
+        ]
         await query.edit_message_text(
             f"🏷 Ուղղություն: {direction}\n"
-            f"📋 Լիստ: {sheet_name}\n\n"
+            f"📋 Նախագիծ: {project_sheet}\n\n"
             f"Սեղմեք «Շարունակել», որպեսզի մուտքագրեք տվյալները:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -256,7 +340,30 @@ async def button_handler(update: Update, context: CallbackContext):
         # Формат: debt_entity_select_<operation>_<entity_type>_<index>
         payload = data.replace("debt_entity_select_", "", 1)
         operation, entity_type, index_text = payload.rsplit("_", 2)
-        await start_debt_text_flow(update, context, operation, entity_type, int(index_text))
+        await _show_project_sheet_selection(
+            update,
+            context,
+            mode="debt",
+            operation=operation,
+            entity_type=entity_type,
+            entity_index=int(index_text)
+        )
+        return
+
+    elif data.startswith("debt_project_select_"):
+        # Формат: debt_project_select_<operation>_<entity_type>_<entity_index>_<sheet_index>
+        payload = data.replace("debt_project_select_", "", 1)
+        operation, entity_type, entity_index_text, sheet_index_text = payload.rsplit("_", 3)
+        entity_index = int(entity_index_text)
+        sheet_index = int(sheet_index_text)
+
+        project_sheet_options = context.user_data.get('project_sheet_options', [])
+        if sheet_index < 0 or sheet_index >= len(project_sheet_options):
+            await query.edit_message_text("❌ Նախագծի թերթիկը չի գտնվել.", reply_markup=create_back_to_menu_keyboard())
+            return
+
+        project_sheet_name = project_sheet_options[sheet_index]
+        await start_debt_text_flow(update, context, operation, entity_type, entity_index, project_sheet_name)
         return
 
     elif data == "owner_debt_balance":

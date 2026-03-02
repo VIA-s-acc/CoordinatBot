@@ -24,7 +24,14 @@ from src.bot.handlers.role_management_handlers import (
     start_add_user, receive_user_id, receive_display_name, set_role_for_new_user,
     start_change_role, select_new_role, apply_new_role,
     start_remove_user, confirm_remove_user, cancel_role_operation,
-    INPUT_USER_ID, INPUT_DISPLAY_NAME, SELECT_ROLE
+    entity_management_menu, start_add_entity, receive_entity_name,
+    receive_entity_spreadsheet, receive_entity_sheet, receive_entity_owner,
+    list_entities, start_delete_entity, execute_delete_entity,
+    start_edit_entity, select_entity_edit_field,
+    start_edit_entity_field_value, apply_entity_field_value,
+    INPUT_USER_ID, INPUT_DISPLAY_NAME, SELECT_ROLE,
+    INPUT_ENTITY_NAME, INPUT_ENTITY_SPREADSHEET, INPUT_ENTITY_SHEET, INPUT_ENTITY_OWNER,
+    INPUT_ENTITY_EDIT_VALUE
 )
 from src.bot.handlers.payment_management_handlers import (
     payments_main_menu, payments_secondary_list, payments_clients_list,
@@ -32,11 +39,11 @@ from src.bot.handlers.payment_management_handlers import (
     start_edit_payment_amount, receive_new_amount,
     start_edit_payment_comment, receive_new_comment,
     confirm_delete_payment, execute_delete_payment, cancel_edit as cancel_payment_edit,
-    get_summary_report,
+    get_summary_report, payments_entity_menu, send_entity_payments_report,
     EDIT_AMOUNT, EDIT_COMMENT
 )
 from src.bot.handlers.basic_commands import (
-    start, menu_command, text_menu_handler, help_command, message_handler
+    start, menu_command, text_menu_handler, help_command, message_handler, cancel_command
 )
 from src.bot.handlers.admin_handlers import (
     set_log_command, set_report_command, allow_user_command,
@@ -150,6 +157,39 @@ def main():
             persistent=False
         )
 
+        # ConversationHandler для добавления бригады/магазина
+        add_entity_conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(start_add_entity, pattern="^entity_add_brigade$"),
+                CallbackQueryHandler(start_add_entity, pattern="^entity_add_shop$")
+            ],
+            states={
+                INPUT_ENTITY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_entity_name)],
+                INPUT_ENTITY_SPREADSHEET: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_entity_spreadsheet)],
+                INPUT_ENTITY_SHEET: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_entity_sheet)],
+                INPUT_ENTITY_OWNER: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_entity_owner)],
+            },
+            fallbacks=[
+                CallbackQueryHandler(entity_management_menu, pattern="^entity_menu$"),
+                CallbackQueryHandler(cancel_role_operation, pattern="^role_menu$")
+            ],
+            name="add_entity_conversation",
+            persistent=False
+        )
+
+        edit_entity_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(start_edit_entity_field_value, pattern="^entity_edit_field_")],
+            states={
+                INPUT_ENTITY_EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, apply_entity_field_value)],
+            },
+            fallbacks=[
+                CallbackQueryHandler(entity_management_menu, pattern="^entity_menu$"),
+                CallbackQueryHandler(cancel_role_operation, pattern="^role_menu$")
+            ],
+            name="edit_entity_conversation",
+            persistent=False
+        )
+
         # Регистрация ConversationHandler'ов (должны быть первыми)
         application.add_handler(add_record_conv)
         application.add_handler(edit_record_conv)
@@ -158,6 +198,8 @@ def main():
         application.add_handler(add_user_conv)
         application.add_handler(edit_payment_amount_conv)
         application.add_handler(edit_payment_comment_conv)
+        application.add_handler(add_entity_conv)
+        application.add_handler(edit_entity_conv)
         
         # Регистрация обработчиков команд
         private_chat = filters.ChatType.PRIVATE
@@ -165,6 +207,7 @@ def main():
         application.add_handler(CommandHandler("start", start, filters=private_chat))
         application.add_handler(CommandHandler("menu", menu_command, filters=private_chat))
         application.add_handler(CommandHandler("help", help_command, filters=private_chat))
+        application.add_handler(CommandHandler("cancel", cancel_command, filters=private_chat))
         application.add_handler(CommandHandler("roles", role_management_menu, filters=private_chat))
         
         # Команды поиска и информации
@@ -224,6 +267,15 @@ def main():
         application.add_handler(CallbackQueryHandler(apply_new_role, pattern="^newrole_"))
         application.add_handler(CallbackQueryHandler(start_remove_user, pattern="^role_remove_user$"))
         application.add_handler(CallbackQueryHandler(confirm_remove_user, pattern="^removeuser_confirm_"))
+        application.add_handler(CallbackQueryHandler(entity_management_menu, pattern="^entity_menu$"))
+        application.add_handler(CallbackQueryHandler(list_entities, pattern="^entity_list_brigades$"))
+        application.add_handler(CallbackQueryHandler(list_entities, pattern="^entity_list_shops$"))
+        application.add_handler(CallbackQueryHandler(start_delete_entity, pattern="^entity_delete_brigade_menu$"))
+        application.add_handler(CallbackQueryHandler(start_delete_entity, pattern="^entity_delete_shop_menu$"))
+        application.add_handler(CallbackQueryHandler(execute_delete_entity, pattern="^entity_delete_(brigade|shop)_"))
+        application.add_handler(CallbackQueryHandler(start_edit_entity, pattern="^entity_edit_brigade_menu$"))
+        application.add_handler(CallbackQueryHandler(start_edit_entity, pattern="^entity_edit_shop_menu$"))
+        application.add_handler(CallbackQueryHandler(select_entity_edit_field, pattern="^entity_edit_select_"))
 
         # Регистрация обработчиков управления платежами
         application.add_handler(CallbackQueryHandler(payments_main_menu, pattern="^pay_menu$"))
@@ -237,6 +289,8 @@ def main():
         application.add_handler(CallbackQueryHandler(confirm_delete_payment, pattern="^payment_delete_confirm_"))
         application.add_handler(CallbackQueryHandler(execute_delete_payment, pattern="^payment_delete_execute_"))
         application.add_handler(CallbackQueryHandler(get_summary_report, pattern="^get_summary_report_"))
+        application.add_handler(CallbackQueryHandler(payments_entity_menu, pattern="^payments_entity_menu_(brigade|shop)$"))
+        application.add_handler(CallbackQueryHandler(send_entity_payments_report, pattern="^payments_entity_report_"))
 
         # Регистрация обработчика кнопок (должен быть после ConversationHandler'ов)
         # Исключаем callback'и, которые должны обрабатываться ConversationHandler'ами

@@ -23,7 +23,7 @@ def _format_amount(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
-async def start_debt_text_flow(update: Update, context: CallbackContext, operation: str, entity_type: str, entity_index: int):
+async def start_debt_text_flow(update: Update, context: CallbackContext, operation: str, entity_type: str, entity_index: int, project_sheet_name: str = None):
     """Запускает текстовый flow для долга/погашения после выбора сущности."""
     query = update.callback_query
     entity = get_entity_by_index(entity_type, entity_index)
@@ -36,6 +36,7 @@ async def start_debt_text_flow(update: Update, context: CallbackContext, operati
         'operation': operation,
         'entity_type': entity_type,
         'entity': entity,
+        'project_sheet_name': project_sheet_name,
         'step': 'description'
     }
 
@@ -43,6 +44,7 @@ async def start_debt_text_flow(update: Update, context: CallbackContext, operati
     await query.edit_message_text(
         f"🧾 {operation_title}\n"
         f"🏷 Ուղղություն: {entity.get('name', 'N/A')}\n\n"
+        f"📋 Նախագիծ: {project_sheet_name or '—'}\n\n"
         f"📝 Մուտքագրեք գործողության նկարագրությունը:"
     )
 
@@ -78,6 +80,7 @@ async def process_debt_flow_message(update: Update, context: CallbackContext) ->
     entity = flow.get('entity', {})
     operation = flow.get('operation')
     description = flow.get('description', '')
+    project_sheet = flow.get('project_sheet_name') or "—"
 
     signed_amount = -abs(amount) if operation == 'debt' else abs(amount)
     operation_title = "Պարտք" if operation == 'debt' else "Պարտքի մարում"
@@ -98,7 +101,7 @@ async def process_debt_flow_message(update: Update, context: CallbackContext) ->
         'date': datetime.now().strftime('%Y-%m-%d'),
         'supplier': supplier,
         'direction': entity.get('name', ''),
-        'description': description,
+        'description': f"{description} | Նախագիծ: {project_sheet}",
         'amount': signed_amount,
         'user_id': user_id,
         'operation_type': operation,
@@ -115,7 +118,7 @@ async def process_debt_flow_message(update: Update, context: CallbackContext) ->
     ]
 
     if operation == 'repayment' and ACTIVE_SPREADSHEET_ID:
-        project_sheet = user_settings.get('active_sheet_name') or target_sheet
+        project_sheet = flow.get('project_sheet_name') or user_settings.get('active_sheet_name') or target_sheet
         records_to_write.append({
             **base,
             'id': f"cb-{str(uuid.uuid4())[:8]}",
@@ -131,12 +134,13 @@ async def process_debt_flow_message(update: Update, context: CallbackContext) ->
             record=record,
         )
 
-    await _send_debt_tickets(context, operation_title, amount, description, entity, supplier)
+    await _send_debt_tickets(context, operation_title, amount, description, entity, supplier, project_sheet)
 
     await update.message.reply_text(
         f"✅ Գործողությունը պահպանվել է\n"
         f"📌 Տեսակ: {operation_title}\n"
         f"🏷  Ուղղություն: {entity.get('name', 'N/A')}\n"
+        f"📋 Նախագիծ: {project_sheet}\n"
         f"💰 Գումար: {_format_amount(abs(amount))}",
     )
 
@@ -144,7 +148,7 @@ async def process_debt_flow_message(update: Update, context: CallbackContext) ->
     return True
 
 
-async def _send_debt_tickets(context: CallbackContext, title: str, amount: float, description: str, entity: dict, supplier: str):
+async def _send_debt_tickets(context: CallbackContext, title: str, amount: float, description: str, entity: dict, supplier: str, project_sheet: str):
     """Отправляет тикет в проектные чаты и владельцу сущности (если назначен)."""
     config = load_bot_config()
     report_chats = config.get('report_chats', {})
@@ -152,6 +156,7 @@ async def _send_debt_tickets(context: CallbackContext, title: str, amount: float
     message = (
         f"📢 <b>{title}</b>\n"
         f"🏷 Ուղղություն: <b>{entity.get('name', 'N/A')}</b>\n"
+        f"📋 Նախագիծ: <b>{project_sheet or '—'}</b>\n"
         f"👤 Օգտագործող: <b>{supplier}</b>\n"
         f"💰 Գումար: <b>{_format_amount(abs(amount))}</b>\n"
         f"📝 Նկատարկում: <b>{description or '—'}</b>"
