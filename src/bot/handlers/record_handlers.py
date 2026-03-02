@@ -17,6 +17,20 @@ from ...utils.report_manager import send_report
 from ..handlers.translation_handlers import _
 
 
+def _resolve_auto_direction(context: CallbackContext):
+    """Возвращает направление для автоподстановки в flow сущностей."""
+    fixed_direction = context.user_data.get('fixed_direction')
+    if fixed_direction:
+        return fixed_direction
+
+    selected_entity_name = context.user_data.get('selected_entity_name')
+    if selected_entity_name:
+        context.user_data['fixed_direction'] = selected_entity_name
+        return selected_entity_name
+
+    return None
+
+
 async def start_add_record(update: Update, context: CallbackContext):
     """Начинает процесс добавления записи"""
     query = update.callback_query
@@ -78,6 +92,12 @@ async def start_add_record(update: Update, context: CallbackContext):
         'date': current_date,
         'user_id': user_id
     }
+
+    # Для сценариев Бригада/Магазин фиксируем направление из выбранной сущности
+    if not context.user_data.get('fixed_direction'):
+        selected_entity_name = context.user_data.get('selected_entity_name')
+        if selected_entity_name:
+            context.user_data['fixed_direction'] = selected_entity_name
     
     # Сразу переходим к выбору поставщика
     display_name = user_settings.get('display_name')
@@ -281,7 +301,7 @@ async def use_my_name(update: Update, context: CallbackContext):
         display_name = "Ֆ"
     
     context.user_data['record']['supplier'] = display_name
-    fixed_direction = context.user_data.get('fixed_direction')
+    fixed_direction = _resolve_auto_direction(context)
     if fixed_direction:
         context.user_data['record']['direction'] = fixed_direction
         await query.edit_message_text(
@@ -306,7 +326,7 @@ async def use_firm_name(update: Update, context: CallbackContext):
     await query.answer()
     
     context.user_data['record']['supplier'] = "Ֆ"
-    fixed_direction = context.user_data.get('fixed_direction')
+    fixed_direction = _resolve_auto_direction(context)
     if fixed_direction:
         context.user_data['record']['direction'] = fixed_direction
         await query.edit_message_text(
@@ -362,7 +382,7 @@ async def get_supplier_manual(update: Update, context: CallbackContext):
             await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
         except Exception:
             pass
-    fixed_direction = context.user_data.get('fixed_direction')
+    fixed_direction = _resolve_auto_direction(context)
     if fixed_direction:
         context.user_data['record']['direction'] = fixed_direction
         sent_msg = await update.message.reply_text(
@@ -389,6 +409,32 @@ async def get_direction(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     if not is_user_allowed(user_id):
         return ConversationHandler.END
+
+    fixed_direction = context.user_data.get('fixed_direction')
+    if fixed_direction:
+        context.user_data['record']['direction'] = fixed_direction
+
+        ids_to_delete = context.user_data.get('messages_to_delete', [])
+        for msg_id in ids_to_delete:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+            except Exception:
+                pass
+        context.user_data['messages_to_delete'] = []
+
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        sent_msg = await update.message.reply_text(
+            f"✅ Ուղղություն: {fixed_direction}\n\n"
+            f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
+            parse_mode="HTML"
+        )
+        context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
+        context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)
+        return DESCRIPTION
     
     direction = update.message.text.strip()
     context.user_data['record']['direction'] = direction

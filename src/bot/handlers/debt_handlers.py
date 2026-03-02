@@ -162,6 +162,14 @@ async def _send_debt_tickets(context: CallbackContext, title: str, amount: float
         f"📝 Նկատարկում: <b>{description or '—'}</b>"
     )
 
+    owner_message = (
+        f"📢 <b>{title}</b>\n"
+        f"🏷 Ուղղություն: <b>{entity.get('name', 'N/A')}</b>\n"
+        f"👤 Օգտագործող: <b>{supplier}</b>\n"
+        f"💰 Գումար: <b>{_format_amount(abs(amount))}</b>\n"
+        f"📝 Նկատարկում: <b>{description or '—'}</b>"
+    )
+
     for chat_id in report_chats.keys():
         try:
             await context.bot.send_message(chat_id=int(chat_id), text=message, parse_mode='HTML')
@@ -171,7 +179,7 @@ async def _send_debt_tickets(context: CallbackContext, title: str, amount: float
     owner_id = entity.get('owner_id')
     if owner_id:
         try:
-            await context.bot.send_message(chat_id=int(owner_id), text=message, parse_mode='HTML')
+            await context.bot.send_message(chat_id=int(owner_id), text=owner_message, parse_mode='HTML')
         except Exception as exc:
             logger.warning(f"Failed to send debt ticket to owner {owner_id}: {exc}")
 
