@@ -2,7 +2,7 @@
 Утилиты для работы с конфигурацией и пользователями
 """
 import json
-from ..config.settings import USERS_FILE, ALLOWED_USERS_FILE, BOT_CONFIG_FILE, logger
+from ..config.settings import USERS_FILE, ALLOWED_USERS_FILE, BOT_CONFIG_FILE, BRIGADES_SHOPS_FILE, logger
 
 
 def load_json_file(file_path: str, default_value=None):
@@ -74,6 +74,63 @@ def save_users(users_data):
     """Сохраняет данные пользователей"""
     return save_json_file(USERS_FILE, users_data)
 
+def load_brigades_shops():
+    """Загружает конфигурацию бригад и магазинов"""
+    default = {
+        'brigades': [],
+        'shops': []
+    }
+    data = load_json_file(BRIGADES_SHOPS_FILE, default)
+    if 'brigades' not in data:
+        data['brigades'] = []
+    if 'shops' not in data:
+        data['shops'] = []
+    return data
+
+def save_brigades_shops(data):
+    """Сохраняет конфигурацию бригад и магазинов"""
+    if 'brigades' not in data:
+        data['brigades'] = []
+    if 'shops' not in data:
+        data['shops'] = []
+    return save_json_file(BRIGADES_SHOPS_FILE, data)
+
+def get_entities_by_type(entity_type: str):
+    """Возвращает список сущностей по типу: brigade/shop"""
+    config = load_brigades_shops()
+    if entity_type == 'brigade':
+        return config.get('brigades', [])
+    if entity_type == 'shop':
+        return config.get('shops', [])
+    return []
+
+def get_entity_by_index(entity_type: str, index: int):
+    """Возвращает сущность по индексу в списке"""
+    entities = get_entities_by_type(entity_type)
+    if 0 <= index < len(entities):
+        return entities[index]
+    return None
+
+def get_owner_entity(owner_user_id: int):
+    """Находит первую сущность, назначенную владельцу"""
+    config = load_brigades_shops()
+
+    for entity in config.get('brigades', []):
+        if entity.get('owner_id') == owner_user_id:
+            return {
+                'entity_type': 'brigade',
+                'entity': entity
+            }
+
+    for entity in config.get('shops', []):
+        if entity.get('owner_id') == owner_user_id:
+            return {
+                'entity_type': 'shop',
+                'entity': entity
+            }
+
+    return None
+
 def get_user_settings(user_id: int):
     """Получает настройки пользователя"""
     users = load_users()
@@ -103,7 +160,8 @@ def update_user_settings(user_id: int, settings: dict):
 # Функции для работы с разрешенными пользователями
 def load_allowed_users():
     """Загружает список разрешенных пользователей"""
-    return load_json_file(ALLOWED_USERS_FILE, [])
+    data = load_json_file(ALLOWED_USERS_FILE, [])
+    return data if isinstance(data, list) else []
 
 def save_allowed_users(allowed_list):
     """Сохраняет список разрешенных пользователей"""
@@ -128,7 +186,7 @@ def remove_allowed_user(user_id: int):
         save_allowed_users(allowed)
 
 # Функция для получения display_name пользователя
-def get_user_display_name(user_id: int) -> str:
+def get_user_display_name(user_id: int):
     """Возвращает display_name пользователя по user_id, если задано"""
     users = load_users()
     user_id_str = str(user_id)
@@ -138,7 +196,7 @@ def get_user_display_name(user_id: int) -> str:
     return None
 
 # Функции для работы с ролями
-def get_user_role(user_id: int) -> str:
+def get_user_role(user_id: int):
     """
     Получает роль пользователя
     Возвращает роль из users.json или определяет по ADMIN_IDS/SUPER_ADMIN_ID
@@ -222,6 +280,11 @@ def is_client(user_id: int) -> bool:
     from ..config.settings import UserRole
     return get_user_role(user_id) == UserRole.CLIENT
 
+def is_shop_owner(user_id: int) -> bool:
+    """Проверяет, является ли пользователь владельцем магазина/бригады"""
+    from ..config.settings import UserRole
+    return get_user_role(user_id) == UserRole.SHOP_OWNER
+
 def can_add_records(user_id: int) -> bool:
     """Проверяет, может ли пользователь добавлять записи"""
     from ..config.settings import UserRole
@@ -255,7 +318,8 @@ def get_role_display_name(role: str) -> str:
         UserRole.ADMIN: 'Ադմինիստրատոր',
         UserRole.WORKER: 'Աշխատող',
         UserRole.SECONDARY: 'Երկրորդային',
-        UserRole.CLIENT: 'Կլիենտ'
+        UserRole.CLIENT: 'Կլիենտ',
+        UserRole.SHOP_OWNER: 'Խանութի/բրիգադի սեփականատեր'  # 'Վաճառող/бригады'
     }
 
     return role_names.get(role, 'Անհայտ')

@@ -55,8 +55,10 @@ async def start_add_record(update: Update, context: CallbackContext):
     # Получаем настройки пользователя
     user_settings = get_user_settings(user_id)
     
+    selected_spreadsheet_id = context.user_data.get('selected_spreadsheet_id') or ACTIVE_SPREADSHEET_ID
+
     # Проверяем настройки
-    if not ACTIVE_SPREADSHEET_ID:
+    if not selected_spreadsheet_id:
         keyboard = [[InlineKeyboardButton(_("menu.back", user_id), callback_data="back_to_menu")]]
         await query.edit_message_text(
             "❌ Նախ պետք է ընտրել աղյուսակը:\n"
@@ -279,13 +281,23 @@ async def use_my_name(update: Update, context: CallbackContext):
         display_name = "Ֆ"
     
     context.user_data['record']['supplier'] = display_name
-    
+    fixed_direction = context.user_data.get('fixed_direction')
+    if fixed_direction:
+        context.user_data['record']['direction'] = fixed_direction
+        await query.edit_message_text(
+            f"✅ Մատակարար: {display_name}\n"
+            f"✅ Ուղղություն: {fixed_direction}\n\n"
+            f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
+            parse_mode="HTML"
+        )
+        return DESCRIPTION
+
     await query.edit_message_text(
         f"✅ Մատակարար: {display_name}\n\n"
         f"🧭 Մուտքագրեք <b>ուղղությունը</b>:",
         parse_mode="HTML"
     )
-    
+
     return DIRECTION
 
 async def use_firm_name(update: Update, context: CallbackContext):
@@ -294,13 +306,23 @@ async def use_firm_name(update: Update, context: CallbackContext):
     await query.answer()
     
     context.user_data['record']['supplier'] = "Ֆ"
-    
+    fixed_direction = context.user_data.get('fixed_direction')
+    if fixed_direction:
+        context.user_data['record']['direction'] = fixed_direction
+        await query.edit_message_text(
+            f"✅ Մատակարար: Ֆ\n"
+            f"✅ Ուղղություն: {fixed_direction}\n\n"
+            f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
+            parse_mode="HTML"
+        )
+        return DESCRIPTION
+
     await query.edit_message_text(
         f"✅ Մատակարար: Ֆ\n\n"
         f"🧭 Մուտքագրեք <b>ուղղությունը</b>:",
         parse_mode="HTML"
     )
-    
+
     return DIRECTION
 
 async def manual_input(update: Update, context: CallbackContext):
@@ -340,6 +362,19 @@ async def get_supplier_manual(update: Update, context: CallbackContext):
             await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=last_bot_msg_id)
         except Exception:
             pass
+    fixed_direction = context.user_data.get('fixed_direction')
+    if fixed_direction:
+        context.user_data['record']['direction'] = fixed_direction
+        sent_msg = await update.message.reply_text(
+            f"✅ Մատակարար: {supplier}\n"
+            f"✅ Ուղղություն: {fixed_direction}\n\n"
+            f"📝 Մուտքագրեք ծախսի <b>նկարագրությունը</b>:",
+            parse_mode="HTML"
+        )
+        context.user_data['last_bot_message_id'] = sent_msg.message_id if sent_msg else None
+        context.user_data.setdefault('messages_to_delete', []).append(sent_msg.message_id)
+        return DESCRIPTION
+
     sent_msg = await update.message.reply_text(
         f"✅ Մատակարար: {supplier}\n\n"
         f"🧭 Մուտքագրեք <b>ուղղությունը</b>:",
@@ -455,10 +490,12 @@ async def get_amount(update: Update, context: CallbackContext):
 
         # Добавляем текущие активные таблицу и лист пользователя
         user_settings = get_user_settings(user_id)
-        spreadsheet_id = ACTIVE_SPREADSHEET_ID
+        spreadsheet_id = context.user_data.get('selected_spreadsheet_id') or ACTIVE_SPREADSHEET_ID
         sheet_name = user_settings.get('active_sheet_name')
         context.user_data['record']['spreadsheet_id'] = spreadsheet_id
         context.user_data['record']['sheet_name'] = sheet_name
+        context.user_data['record']['operation_type'] = context.user_data.get('operation_type', 'expense')
+        context.user_data['record']['coefficient'] = context.user_data.get('coefficient', 1)
 
         record = context.user_data['record']
 
@@ -646,3 +683,29 @@ async def start_skip_record_selection(update: Update, context: CallbackContext):
     # Переходим в состояние выбора листа
     from ..states.conversation_states import SHEET_SELECTION
     return SHEET_SELECTION
+
+
+async def start_add_entity_record(update: Update, context: CallbackContext, entity: dict):
+    """Запускает стандартный flow добавления записи с заранее заданными spreadsheet/sheet/direction."""
+    query = update.callback_query
+    user_id = update.effective_user.id
+
+    if not is_user_allowed(user_id):
+        await query.edit_message_text("❌ Ваш доступ запрещен:")
+        return ConversationHandler.END
+
+    sheet_name = entity.get('sheet_name') or entity.get('name')
+    spreadsheet_id = entity.get('spreadsheet_id')
+    direction = entity.get('name')
+
+    if not spreadsheet_id or not sheet_name:
+        await query.edit_message_text("❌ Для выбранного направления не настроены spreadsheet_id/sheet_name.")
+        return ConversationHandler.END
+
+    context.user_data['selected_spreadsheet_id'] = spreadsheet_id
+    context.user_data['selected_sheet_name'] = sheet_name
+    context.user_data['fixed_direction'] = direction
+    context.user_data['operation_type'] = 'expense'
+    context.user_data['coefficient'] = 1
+
+    return await start_add_record(update, context)

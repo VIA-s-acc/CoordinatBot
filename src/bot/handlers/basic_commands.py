@@ -193,6 +193,13 @@ async def message_handler(update: Update, context: CallbackContext):
     if user_id in ADMIN_IDS and context.user_data.get('pay_step'):
         await handle_payment_step(update, context)
         return
+
+    # Обработка flow Пարտք / Պարտքի մարում
+    if context.user_data.get('debt_flow'):
+        from .debt_handlers import process_debt_flow_message
+        handled = await process_debt_flow_message(update, context)
+        if handled:
+            return
     
     # Если пользователь не в процессе диалога, предлагаем меню
     await update.message.reply_text(

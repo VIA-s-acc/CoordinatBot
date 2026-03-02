@@ -216,6 +216,7 @@ async def receive_display_name(update: Update, context: ContextTypes.DEFAULT_TYP
         [InlineKeyboardButton("Աշխատող", callback_data=f"setrole_{UserRole.WORKER}")],
         [InlineKeyboardButton("Երկրորդային", callback_data=f"setrole_{UserRole.SECONDARY}")],
         [InlineKeyboardButton("Կլիենտ", callback_data=f"setrole_{UserRole.CLIENT}")],
+        [InlineKeyboardButton("Խանութի տեր/բրիգադի", callback_data=f"setrole_{UserRole.SHOP_OWNER}")],
         [InlineKeyboardButton("🔙 Отмена", callback_data="role_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -346,6 +347,7 @@ async def select_new_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Աշխատող", callback_data=f"newrole_{user_id}_{UserRole.WORKER}")],
         [InlineKeyboardButton("Երկրորդային", callback_data=f"newrole_{user_id}_{UserRole.SECONDARY}")],
         [InlineKeyboardButton("Կլիենտ", callback_data=f"newrole_{user_id}_{UserRole.CLIENT}")],
+        [InlineKeyboardButton("Խանութի տեր/բրիգադի", callback_data=f"newrole_{user_id}_{UserRole.SHOP_OWNER}")],
         [InlineKeyboardButton("🔙 Հետ", callback_data="role_change_role")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -371,9 +373,10 @@ async def apply_new_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
 
-    parts = query.data.replace("newrole_", "").split("_")
-    user_id = int(parts[0])
-    new_role = parts[1]
+    payload = query.data.replace("newrole_", "", 1)
+    first_sep = payload.find("_")
+    user_id = int(payload[:first_sep])
+    new_role = payload[first_sep + 1:]
 
     set_user_role(user_id, new_role)
 

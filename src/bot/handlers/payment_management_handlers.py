@@ -11,7 +11,12 @@ from ...utils.config_utils import (
     is_admin, is_super_admin, get_user_role, get_users_by_role,
     get_user_display_name, load_users
 )
-from ...database.database_manager import get_payments, delete_payment, update_payment, get_role_by_display_name
+from ...database.database_manager import (
+    get_payments, delete_payment, update_payment,
+    get_role_by_display_name, get_all_records
+)
+from ...utils.date_utils import normalize_date, safe_parse_date_or_none
+from datetime import datetime
 
 
 # Conversation states
@@ -38,6 +43,54 @@ def get_user_role_by_display_name(display_name: str) -> str:
     return UserRole.WORKER
 
 
+def _calculate_worker_expenses(display_name: str, all_records):
+    """Считает расходы сотрудника по логике summary-отчета."""
+    unique_records = {}
+
+    for record in all_records:
+        if float(record.get('amount', 0) or 0) == 0:
+            continue
+
+        supplier = str(record.get('supplier', '')).strip()
+        if supplier.lower() != display_name.lower():
+            continue
+
+        record_id = record.get('id')
+        if not record_id:
+            continue
+
+        existing = unique_records.get(record_id)
+        if existing:
+            existing_updated = existing.get('updated_at', '')
+            current_updated = record.get('updated_at', '')
+            if str(current_updated) > str(existing_updated):
+                unique_records[record_id] = dict(record)
+        else:
+            unique_records[record_id] = dict(record)
+
+    total_expenses = 0.0
+    for record in unique_records.values():
+        date_raw = str(record.get('date', '') or '')
+        try:
+            normalized = normalize_date(date_raw)
+        except Exception:
+            continue
+
+        record_date = safe_parse_date_or_none(normalized)
+        if record_date is None:
+            continue
+
+        if record.get('supplier') == "Նարեկ":
+            start_date = datetime.strptime("2025-05-10", "%Y-%m-%d").date()
+        else:
+            start_date = datetime.strptime("2024-12-05", "%Y-%m-%d").date()
+
+        if record_date >= start_date:
+            total_expenses += float(record.get('amount', 0) or 0)
+
+    return total_expenses
+
+
 async def payments_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Главное меню платежей (только для админа)
@@ -62,15 +115,18 @@ async def payments_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Формируем список с платежами
     workers_with_payments = []
+    all_records = get_all_records()
     for user_id_int in worker_users:
         display_name = get_user_display_name(user_id_int)
         if display_name:
             user_payments = get_payments(user_display_name=display_name)
-            total_amount = sum(p['amount'] for p in user_payments)
+            total_received = sum(p['amount'] for p in user_payments)
+            total_expenses = _calculate_worker_expenses(display_name, all_records)
+            balance = total_expenses - total_received
             workers_with_payments.append({
                 'name': display_name,
                 'count': len(user_payments),
-                'total': total_amount
+                'balance': balance
             })
 
     # Сортируем по имени
@@ -87,7 +143,7 @@ async def payments_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Кнопки для каждого воркера
     for worker in current_workers:
-        button_text = f"👷 {worker['name']} - {worker['total']:,.0f} դրամ ({worker['count']})"
+        button_text = f"👷 {worker['name']} - մնացորդ {worker['balance']:,.0f} դրամ ({worker['count']})"
         keyboard.append([InlineKeyboardButton(
             button_text,
             callback_data=f"worker_payments_{worker['name']}"
@@ -843,8 +899,12 @@ async def send_payments_only_report(update: Update, context: ContextTypes.DEFAUL
             'sheet_name': 'Թերթիկ'
         })
 
-        # Выбираем только нужные колонки для отображения
-        columns_to_show = ['ID', 'Գումար', 'Սկզբնական ամսաթիվ', 'Վերջնական ամսաթիվ', 'Մեկնաբանություն', 'Ստեղծման ամսաթիվ']
+        # Удаляем служебные поля и выбираем отображаемые колонки
+        for service_col in ['Սկզբնական ամսաթիվ', 'Աղյուսակի ID', 'Թերթիկ', 'to', 'date']:
+            if service_col in df_payments.columns:
+                df_payments = df_payments.drop(columns=[service_col])
+
+        columns_to_show = ['ID', 'Գումար', 'Վերջնական ամսաթիվ', 'Մեկնաբանություն', 'Ստեղծման ամսաթիվ']
         df_payments = df_payments[columns_to_show]
 
         # Подсчитываем итоги

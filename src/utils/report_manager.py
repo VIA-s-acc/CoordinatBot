@@ -15,6 +15,11 @@ from .config_utils import load_bot_config
 from ..config.settings import logger
 
 
+def _drop_service_columns(df: pd.DataFrame) -> pd.DataFrame:
+    service_columns = ['date', 'to', 'date_from', 'spreadsheet_id', 'sheet_name']
+    return df.drop(columns=[c for c in service_columns if c in df.columns], errors='ignore')
+
+
 async def send_report(context: CallbackContext, action: str, record: dict, user: dict):
     """Отправляет отчет о действии в настроенные чаты"""
     config = load_bot_config()
@@ -289,8 +294,8 @@ class ReportManager:
             # Создаем Excel файл
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='All Expenses', index=False)
-                summary.to_excel(writer, sheet_name='Summary', index=False)
+                _drop_service_columns(df).to_excel(writer, sheet_name='All Expenses', index=False)
+                _drop_service_columns(summary).to_excel(writer, sheet_name='Summary', index=False)
             output.seek(0)
             
             await update.effective_message.reply_document(
@@ -344,7 +349,7 @@ class ReportManager:
             
             output_total = BytesIO()
             with pd.ExcelWriter(output_total, engine='openpyxl') as writer:
-                df_total.to_excel(writer, sheet_name='Իտոգներ', index=False)
+                _drop_service_columns(df_total).to_excel(writer, sheet_name='Իտոգներ', index=False)
             output_total.seek(0)
             
             await update.effective_message.reply_document(

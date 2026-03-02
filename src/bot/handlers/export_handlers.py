@@ -13,6 +13,11 @@ from ...utils.config_utils import load_users
 from ...database.database_manager import get_all_records, get_payments
 
 
+def _drop_service_columns(df: pd.DataFrame) -> pd.DataFrame:
+    service_columns = ['date', 'to', 'date_from', 'spreadsheet_id', 'sheet_name']
+    return df.drop(columns=[c for c in service_columns if c in df.columns], errors='ignore')
+
+
 async def export_menu(update: Update, context: CallbackContext):
     """Меню экспорта данных"""
     query = update.callback_query
@@ -54,6 +59,7 @@ async def export_all_records(update: Update, context: CallbackContext):
         
         # Создаем DataFrame
         df = pd.DataFrame(records)
+        df = _drop_service_columns(df)
         
         # Экспорт в Excel
         output = BytesIO()
@@ -99,13 +105,13 @@ async def export_all_payments(update: Update, context: CallbackContext):
                 for payment in payments:
                     payment_data = {
                         'display_name': display_name,
-                        'amount': payment[0],
-                        'date_from': payment[1],
-                        'date_to': payment[2],
-                        'comment': payment[3],
-                        'created_at': payment[4],
-                        'spreadsheet_id': payment[5] if len(payment) > 5 else '',
-                        'sheet_name': payment[6] if len(payment) > 6 else ''
+                        'amount': payment.get('amount', 0),
+                        'date_from': payment.get('date_from', ''),
+                        'date_to': payment.get('date_to', ''),
+                        'comment': payment.get('comment', ''),
+                        'created_at': payment.get('created_at', ''),
+                        'spreadsheet_id': payment.get('spreadsheet_id', ''),
+                        'sheet_name': payment.get('sheet_name', '')
                     }
                     all_payments.append(payment_data)
         
@@ -115,6 +121,7 @@ async def export_all_payments(update: Update, context: CallbackContext):
         
         # Создаем DataFrame
         df = pd.DataFrame(all_payments)
+        df = _drop_service_columns(df)
         
         # Экспорт в Excel
         output = BytesIO()
@@ -213,16 +220,25 @@ async def export_full_backup(update: Update, context: CallbackContext):
                     for payment in payments:
                         all_payments.append({
                             'display_name': display_name,
-                            'amount': payment[0],
-                            'date_from': payment[1],
-                            'date_to': payment[2],
-                            'comment': payment[3],
-                            'created_at': payment[4],
-                            'spreadsheet_id': payment[5] if len(payment) > 5 else '',
-                            'sheet_name': payment[6] if len(payment) > 6 else ''
+                            'amount': payment.get('amount', 0),
+                            'date_from': payment.get('date_from', ''),
+                            'date_to': payment.get('date_to', ''),
+                            'comment': payment.get('comment', ''),
+                            'created_at': payment.get('created_at', ''),
+                            'spreadsheet_id': payment.get('spreadsheet_id', ''),
+                            'sheet_name': payment.get('sheet_name', '')
                         })
         
         # Создаем полный бэкап
+        sanitized_records = [
+            {k: v for k, v in rec.items() if k not in {'date', 'to', 'date_from', 'spreadsheet_id', 'sheet_name'}}
+            for rec in records
+        ]
+        sanitized_payments = [
+            {k: v for k, v in pay.items() if k not in {'date', 'to', 'date_from', 'spreadsheet_id', 'sheet_name'}}
+            for pay in all_payments
+        ]
+
         backup_data = {
             'timestamp': datetime.now().isoformat(),
             'version': '1.0',
@@ -231,9 +247,9 @@ async def export_full_backup(update: Update, context: CallbackContext):
                 'users_count': len(users),
                 'payments_count': len(all_payments)
             },
-            'records': records,
+            'records': sanitized_records,
             'users': users,
-            'payments': all_payments
+            'payments': sanitized_payments
         }
         
         # Создаем Excel файл с несколькими листами
@@ -242,11 +258,13 @@ async def export_full_backup(update: Update, context: CallbackContext):
             # Лист с записями
             if records:
                 df_records = pd.DataFrame(records)
+                df_records = _drop_service_columns(df_records)
                 df_records.to_excel(writer, sheet_name='Записи', index=False)
             
             # Лист с платежами
             if all_payments:
                 df_payments = pd.DataFrame(all_payments)
+                df_payments = _drop_service_columns(df_payments)
                 df_payments.to_excel(writer, sheet_name='Платежи', index=False)
             
             # Лист с пользователями

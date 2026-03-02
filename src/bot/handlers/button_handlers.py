@@ -11,16 +11,22 @@ from telegram.ext import CallbackContext, ConversationHandler
 from ..keyboards.inline_keyboards import (
     create_main_menu, create_workers_menu, create_payment_menu, 
     create_back_to_menu_keyboard, create_add_record_menu,
-    create_add_record_sheet_selection
+    create_add_record_sheet_selection, create_expense_type_menu,
+    create_entity_selection_menu, create_debt_type_menu
 )
 from ..states.conversation_states import DIRECTION, SUPPLIER_MANUAL
-from ...utils.config_utils import is_user_allowed, get_user_settings, update_user_settings
+from ...utils.config_utils import (
+    is_user_allowed, get_user_settings, update_user_settings,
+    get_entities_by_type, is_admin
+)
 from ...utils.localization import _
 from ...database.database_manager import get_db_stats
 from ...utils.sheets_cache import get_cached_sheets_info, get_cached_spreadsheets
 from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID, logger
+from .debt_handlers import start_debt_text_flow, show_owner_balance
 
 from .payment_handlers import pay_menu_handler, pay_user_handler, send_payment_report
+from .payment_management_handlers import payments_main_menu
 from .settings_handlers import (
     settings_menu, language_menu, set_language, notification_settings,
     toggle_notifications, system_info
@@ -147,6 +153,122 @@ async def button_handler(update: Update, context: CallbackContext):
             reply_markup=create_main_menu(user_id)
         )
         return ConversationHandler.END
+
+    # Новое меню расходов
+    elif data == "expense_menu":
+        await query.edit_message_text(
+            "Ընտրեք ծախսի տեսակը:",
+            reply_markup=create_expense_type_menu()
+        )
+        return
+
+    elif data == "expense_other":
+        await show_sheet_selection_for_add_record(update, context, "record")
+        return
+
+    elif data in ("expense_entity_type_brigade", "expense_entity_type_shop"):
+        entity_type = "brigade" if data.endswith("brigade") else "shop"
+        entities = get_entities_by_type(entity_type)
+        if not entities:
+            await query.edit_message_text(
+                "ℹ️ Ուղղություններ չկան ընտրած տեսակի համար.",
+                reply_markup=create_expense_type_menu()
+            )
+            return
+        await query.edit_message_text(
+            "Ընտրեք ուղղությունը:",
+            reply_markup=create_entity_selection_menu(
+                entities,
+                prefix=f"expense_entity_select_{entity_type}",
+                back_callback="expense_menu"
+            )
+        )
+        return
+
+    elif data.startswith("expense_entity_select_"):
+        # Формат: expense_entity_select_<type>_<index>
+        payload = data.replace("expense_entity_select_", "", 1)
+        entity_type, index_text = payload.rsplit("_", 1)
+        entity_index = int(index_text)
+        entities = get_entities_by_type(entity_type)
+        if entity_index < 0 or entity_index >= len(entities):
+            await query.edit_message_text("❌ Ուղղությունը չի գտնվել.", reply_markup=create_back_to_menu_keyboard())
+            return
+        entity = entities[entity_index]
+        sheet_name = entity.get('sheet_name') or entity.get('name')
+        spreadsheet_id = entity.get('spreadsheet_id')
+        direction = entity.get('name')
+
+        if not spreadsheet_id or not sheet_name:
+            await query.edit_message_text("❌ Ուղղության համար չի լրացվել spreadsheet_id/sheet_name.", reply_markup=create_back_to_menu_keyboard())
+            return
+
+        context.user_data['selected_spreadsheet_id'] = spreadsheet_id
+        context.user_data['selected_sheet_name'] = sheet_name
+        context.user_data['fixed_direction'] = direction
+        context.user_data['operation_type'] = 'expense'
+        context.user_data['coefficient'] = 1
+
+        keyboard = [[InlineKeyboardButton("➡️ Продолжить", callback_data=f"add_record_sheet_{sheet_name}")]]
+        await query.edit_message_text(
+            f"🏷 Ուղղություն: {direction}\n"
+            f"📋 Լիստ: {sheet_name}\n\n"
+            f"Սեղմեք «Շարունակել», որպեսզի մուտքագրեք տվյալները:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    # Новое меню долгов
+    elif data == "debt_menu":
+        await query.edit_message_text(
+            "Պարտք — ընտրեք տեսակը:",
+            reply_markup=create_debt_type_menu("debt")
+        )
+        return
+
+    elif data == "repayment_menu":
+        await query.edit_message_text(
+            "Պարտքի մարում — ընտրեք տեսակը:",
+            reply_markup=create_debt_type_menu("repayment")
+        )
+        return
+
+    elif data.startswith("debt_entity_type_"):
+        # Формат: debt_entity_type_<operation>_<entity_type>
+        payload = data.replace("debt_entity_type_", "", 1)
+        operation, entity_type = payload.rsplit("_", 1)
+        entities = get_entities_by_type(entity_type)
+        if not entities:
+            await query.edit_message_text("ℹ️ Ուղղություններ չկան ընտրած տեսակի համար.", reply_markup=create_back_to_menu_keyboard())
+            return
+
+        await query.edit_message_text(
+            "Ընտրեք ուղղությունը:",
+            reply_markup=create_entity_selection_menu(
+                entities,
+                prefix=f"debt_entity_select_{operation}_{entity_type}",
+                back_callback="back_to_menu"
+            )
+        )
+        return
+
+    elif data.startswith("debt_entity_select_"):
+        # Формат: debt_entity_select_<operation>_<entity_type>_<index>
+        payload = data.replace("debt_entity_select_", "", 1)
+        operation, entity_type, index_text = payload.rsplit("_", 2)
+        await start_debt_text_flow(update, context, operation, entity_type, int(index_text))
+        return
+
+    elif data == "owner_debt_balance":
+        await show_owner_balance(update, context)
+        return
+
+    elif data == "payments_menu":
+        if is_admin(user_id):
+            await payments_main_menu(update, context)
+        else:
+            await show_my_payments(update, context)
+        return
     
     # Меню добавления записи
     elif data == "add_record_menu":

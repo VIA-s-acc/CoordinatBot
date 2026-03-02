@@ -160,30 +160,32 @@ def main():
         application.add_handler(edit_payment_comment_conv)
         
         # Регистрация обработчиков команд
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("menu", menu_command))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("roles", role_management_menu))
+        private_chat = filters.ChatType.PRIVATE
+
+        application.add_handler(CommandHandler("start", start, filters=private_chat))
+        application.add_handler(CommandHandler("menu", menu_command, filters=private_chat))
+        application.add_handler(CommandHandler("help", help_command, filters=private_chat))
+        application.add_handler(CommandHandler("roles", role_management_menu, filters=private_chat))
         
         # Команды поиска и информации
-        application.add_handler(CommandHandler("search", search_command))
-        application.add_handler(CommandHandler("recent", recent_command))
-        application.add_handler(CommandHandler("info", info_command))
-        application.add_handler(CommandHandler("my_report", my_report_command))
+        application.add_handler(CommandHandler("search", search_command, filters=private_chat))
+        application.add_handler(CommandHandler("recent", recent_command, filters=private_chat))
+        application.add_handler(CommandHandler("info", info_command, filters=private_chat))
+        application.add_handler(CommandHandler("my_report", my_report_command, filters=private_chat))
         
         # Административные команды
-        application.add_handler(CommandHandler("set_log", set_log_command))
-        application.add_handler(CommandHandler("set_sheet", set_sheet_command))
-        application.add_handler(CommandHandler("set_report", set_report_command))
-        application.add_handler(CommandHandler("allow_user", allow_user_command))
-        application.add_handler(CommandHandler("disallow_user", disallow_user_command))
-        application.add_handler(CommandHandler("allowed_users", allowed_users_command))
-        application.add_handler(CommandHandler("set_user_name", set_user_name_command))
-        application.add_handler(CommandHandler("export", export_command))
-        application.add_handler(CommandHandler("sync_sheets", sync_sheets_command))
-        application.add_handler(CommandHandler("initialize_sheets", initialize_sheets_command))
-        application.add_handler(CommandHandler("send_data_files", send_data_files_command))
-        application.add_handler(CommandHandler("add_backup_chat", add_backup_chat_command))
+        application.add_handler(CommandHandler("set_log", set_log_command, filters=private_chat))
+        application.add_handler(CommandHandler("set_sheet", set_sheet_command, filters=private_chat))
+        application.add_handler(CommandHandler("set_report", set_report_command, filters=private_chat))
+        application.add_handler(CommandHandler("allow_user", allow_user_command, filters=private_chat))
+        application.add_handler(CommandHandler("disallow_user", disallow_user_command, filters=private_chat))
+        application.add_handler(CommandHandler("allowed_users", allowed_users_command, filters=private_chat))
+        application.add_handler(CommandHandler("set_user_name", set_user_name_command, filters=private_chat))
+        application.add_handler(CommandHandler("export", export_command, filters=private_chat))
+        application.add_handler(CommandHandler("sync_sheets", sync_sheets_command, filters=private_chat))
+        application.add_handler(CommandHandler("initialize_sheets", initialize_sheets_command, filters=private_chat))
+        application.add_handler(CommandHandler("send_data_files", send_data_files_command, filters=private_chat))
+        application.add_handler(CommandHandler("add_backup_chat", add_backup_chat_command, filters=private_chat))
 
         # Настройка автоматического бэкапа
         from src.config.settings import BACKUP_CHAT_ID, BACKUP_INTERVAL_HOURS
@@ -211,7 +213,7 @@ def main():
         application.add_handler(CallbackQueryHandler(confirm_delete, pattern=r"^confirm_delete_"))
         application.add_handler(CallbackQueryHandler(cancel_edit, pattern=r"^cancel_edit_"))
         logger.info("Handlers for confirm_delete_ and cancel_edit_ registered")
-        application.add_handler(CommandHandler("clean_duplicates", clean_duplicates_command))
+        application.add_handler(CommandHandler("clean_duplicates", clean_duplicates_command, filters=private_chat))
 
         # Регистрация обработчиков управления ролями
         application.add_handler(CallbackQueryHandler(role_management_menu, pattern="^role_menu$"))
@@ -244,8 +246,8 @@ def main():
         ))
         
         # Регистрация обработчиков сообщений
-        application.add_handler(MessageHandler(filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, text_menu_handler))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, message_handler))
+        application.add_handler(MessageHandler(private_chat & filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, text_menu_handler))
+        application.add_handler(MessageHandler(private_chat & filters.TEXT & ~filters.Text(["📋 Մենյու"]) & ~filters.COMMAND, message_handler))
         
         # Регистрация обработчика ошибок
         application.add_error_handler(error_handler)
@@ -326,14 +328,14 @@ if __name__ == '__main__':
     
     # Инициализация файлов конфигурации, если они не существуют
     import json
-    from src.config.settings import USERS_FILE, ALLOWED_USERS_FILE, BOT_CONFIG_FILE
+    from src.config.settings import USERS_FILE, ALLOWED_USERS_FILE, BOT_CONFIG_FILE, BRIGADES_SHOPS_FILE
     
     # Обновляем пути к файлам в соответствии с режимом
     if os.environ.get('DEPLOY_MODE') == 'true':
         USERS_FILE = os.path.join(DATA_DIR, 'users.json')
         ALLOWED_USERS_FILE = os.path.join(DATA_DIR, 'allowed_users.json')
         BOT_CONFIG_FILE = os.path.join(DATA_DIR, 'bot_config.json')
-    
+        BRIGADES_SHOPS_FILE = os.path.join(DATA_DIR, 'brigades_shops.json')
     if not os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'w', encoding='utf-8') as f:
             json.dump({}, f)
@@ -345,5 +347,9 @@ if __name__ == '__main__':
     if not os.path.exists(BOT_CONFIG_FILE):
         with open(BOT_CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump({'log_chat_id': None, 'report_chats': {}}, f)
+    
+    if not os.path.exists(BRIGADES_SHOPS_FILE):
+        with open(BRIGADES_SHOPS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({}, f)
     
     main()

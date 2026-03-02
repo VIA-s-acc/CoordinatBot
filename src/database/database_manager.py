@@ -30,6 +30,8 @@ class DatabaseManager:
                     amount REAL NOT NULL,
                     spreadsheet_id TEXT,
                     sheet_name TEXT,
+                    operation_type TEXT DEFAULT 'expense',
+                    coefficient INTEGER DEFAULT 1,
                     user_id INTEGER,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -56,6 +58,12 @@ class DatabaseManager:
             if "user_id" not in columns:
                 cursor.execute("ALTER TABLE records ADD COLUMN user_id INTEGER")
                 logger.info("Migration: added user_id column to records table")
+            if "operation_type" not in columns:
+                cursor.execute("ALTER TABLE records ADD COLUMN operation_type TEXT DEFAULT 'expense'")
+                logger.info("Migration: added operation_type column to records table")
+            if "coefficient" not in columns:
+                cursor.execute("ALTER TABLE records ADD COLUMN coefficient INTEGER DEFAULT 1")
+                logger.info("Migration: added coefficient column to records table")
 
             conn.commit()
             conn.close()
@@ -75,8 +83,8 @@ class DatabaseManager:
             cursor.execute('''
                 INSERT INTO records (
                     id, date, supplier, direction, description, amount,
-                    spreadsheet_id, sheet_name, user_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    spreadsheet_id, sheet_name, operation_type, coefficient, user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 record.get('id'),
                 record.get('date'),
@@ -86,6 +94,8 @@ class DatabaseManager:
                 record.get('amount', 0),
                 record.get('spreadsheet_id'),
                 record.get('sheet_name'),
+                record.get('operation_type', 'expense'),
+                record.get('coefficient', 1),
                 record.get('user_id')
             ))
 

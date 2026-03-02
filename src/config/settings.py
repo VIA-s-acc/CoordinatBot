@@ -29,6 +29,7 @@ class UserRole:
     WORKER = 'worker'             # Работник (текущие обычные пользователи)
     SECONDARY = 'secondary'       # Вторичный (только просмотр платежей)
     CLIENT = 'client'             # Клиент (только получение уведомлений)
+    SHOP_OWNER = 'shop_owner'     # Владелец магазина/бригады (только просмотр долга)
 
 # Пути к файлам
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -48,6 +49,7 @@ CREDENTIALS_DIR = os.path.join(BASE_DIR, 'credentials')
 USERS_FILE = os.path.join(DATA_DIR, 'users.json')
 ALLOWED_USERS_FILE = os.path.join(DATA_DIR, 'allowed_users.json')
 BOT_CONFIG_FILE = os.path.join(DATA_DIR, 'bot_config.json')
+BRIGADES_SHOPS_FILE = os.path.join(DATA_DIR, 'brigades_shops.json')
 DATABASE_PATH = os.path.join(DATA_DIR, 'expenses.db')
 
 # Google Sheets конфигурация

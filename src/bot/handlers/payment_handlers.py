@@ -9,7 +9,7 @@ from telegram.ext import CallbackContext, ConversationHandler
 
 from ...config.settings import ADMIN_IDS, ACTIVE_SPREADSHEET_ID, logger
 import os
-from ...utils.config_utils import load_users, get_user_settings, send_to_log_chat
+from ...utils.config_utils import load_users, get_user_settings, send_to_log_chat, is_super_admin
 from ...database.database_manager import add_payment, get_payments, get_all_records
 from ...utils.payment_utils import (
     normalize_date, merge_payment_intervals, get_user_id_by_display_name, send_message_to_user
@@ -21,6 +21,12 @@ from ..handlers.translation_handlers import _
 
 # --- Новая команда администратора для отправки файлов из папки data ---
 from telegram.constants import ChatAction
+
+
+def _drop_service_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Удаляет служебные поля из отчетных таблиц."""
+    service_columns = ['date', 'to', 'date_from', 'spreadsheet_id', 'sheet_name']
+    return df.drop(columns=[col for col in service_columns if col in df.columns], errors='ignore')
 
 async def send_data_files_to_admin(update: Update, context: CallbackContext):
     """Команда администратора: отправляет все файлы из папки data админу"""
@@ -458,7 +464,7 @@ async def get_payment_comment(update: Update, context: CallbackContext):
             f"📊 Փոխանցող: {sender_name}\n"
             f"👤 Ստացող: {display_name}\n"
             f"🗓 Ամսաթիվ: {date_from}\n"
-            f"💵 Գումար: {int(amount)} դրամ\n"
+            f"💵 Գումար: {amount:,.0f} դրամ\n"
             f"📝 Նկարագրություն: {comment or 'Առանց մեկնաբանության'}\n"
         )
 
@@ -486,6 +492,9 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
     Формирует и отправляет Excel-отчет с разбивкой по промежуткам выплат для заданного работника
     """
     try:
+        current_user_id = update.effective_user.id
+        detailed_reports_allowed = is_super_admin(current_user_id)
+
         # Получаем все записи из БД и фильтруем по пользователю
         db_records = get_all_records()
         filtered_records = []
@@ -585,22 +594,25 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     # Пустой лист расходов
                     empty_expenses = pd.DataFrame(columns=['date', 'supplier', 'amount', 'description'])
-                    empty_expenses.to_excel(writer, sheet_name='Ծախսեր', index=False)
-                    summary.to_excel(writer, sheet_name='Ամփոփ', index=False)
+                    _drop_service_columns(empty_expenses).to_excel(writer, sheet_name='Ծախսեր', index=False)
+                    _drop_service_columns(summary).to_excel(writer, sheet_name='Ամփոփ', index=False)
                     if not df_pay_merged.empty:
-                        df_pay_merged.to_excel(writer, sheet_name='Վճարումներ', index=False)
+                        _drop_service_columns(df_pay_merged).to_excel(writer, sheet_name='Վճարումներ', index=False)
+                    else:
+                        _drop_service_columns(pd.DataFrame()).to_excel(writer, sheet_name='Վճարումներ', index=False)
                 output.seek(0)
 
-                await update.callback_query.message.reply_document(
-                    document=output,
-                    filename=f"{display_name}_{sheet_name}_report.xlsx",
-                    caption=(
-                        f"📋 Թերթ: {sheet_name}\n"
-                        f"💰 Ընդհանուր ծախս: 0 դրամ (без записей)\n"
-                        f"💵 Ընդհանուր վճար: {total_paid:,.2f} դրամ\n"
-                        f"💸 Մնացորդ: {-total_paid:,.2f} դրամ"
+                if detailed_reports_allowed:
+                    await update.callback_query.message.reply_document(
+                        document=output,
+                        filename=f"{display_name}_{sheet_name}_report.xlsx",
+                        caption=(
+                            f"📋 Թերթ: {sheet_name}\n"
+                            f"💰 Ընդհանուր ծախս: 0 դրամ (без записей)\n"
+                            f"💵 Ընդհանուր վճար: {total_paid:,.2f} դրամ\n"
+                            f"💸 Մնացորդ: {-total_paid:,.2f} դրամ"
+                        )
                     )
-                )
 
             # Общий отчет
             if all_summaries:
@@ -615,11 +627,11 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
 
                 output_total = BytesIO()
                 with pd.ExcelWriter(output_total, engine='openpyxl') as writer:
-                    df_total.to_excel(writer, sheet_name='Ամփոփ', index=False)
+                    _drop_service_columns(df_total).to_excel(writer, sheet_name='Ամփոփ', index=False)
                     if all_payments_list:
                         df_all_payments = pd.DataFrame(all_payments_list)
                         df_all_payments = df_all_payments[['amount', 'date_from', 'date_to', 'comment', 'created_at', 'spreadsheet_id', 'sheet_name']]
-                        df_all_payments.to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
+                        _drop_service_columns(df_all_payments).to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
                 output_total.seek(0)
                 
                 await update.callback_query.message.reply_document(
@@ -708,23 +720,24 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
 
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Ծախսեր', index=False)
-                summary.to_excel(writer, sheet_name='Ամփոփ', index=False)
+                _drop_service_columns(df).to_excel(writer, sheet_name='Ծախսեր', index=False)
+                _drop_service_columns(summary).to_excel(writer, sheet_name='Ամփոփ', index=False)
                 if not df_pay_sheet.empty:
-                    df_pay_sheet.to_excel(writer, sheet_name='Վճարումներ', index=False)
+                    _drop_service_columns(df_pay_sheet).to_excel(writer, sheet_name='Վճարումներ', index=False)
                 else:
                     empty_payments = pd.DataFrame(columns=['amount', 'date_from', 'date_to'])
-                    empty_payments.to_excel(writer, sheet_name='Վճարումներ', index=False)
+                    _drop_service_columns(empty_payments).to_excel(writer, sheet_name='Վճարումներ', index=False)
             output.seek(0)
 
-            await update.callback_query.message.reply_document(
-                document=output,
-                filename=f"{display_name}_{sheet_name}_report.xlsx",
-                caption=(
-                    f"📋 Թերթ: {sheet_name}\n"
-                    f"💰 Ընդհանուր ծախս: {df_amount_total:,.2f} դրամ\n"
+            if detailed_reports_allowed:
+                await update.callback_query.message.reply_document(
+                    document=output,
+                    filename=f"{display_name}_{sheet_name}_report.xlsx",
+                    caption=(
+                        f"📋 Թերթ: {sheet_name}\n"
+                        f"💰 Ընդհանուր ծախս: {df_amount_total:,.2f} դրամ\n"
+                    )
                 )
-            )
 
         # Итоговая таблица по всем листам
         if all_summaries:
@@ -754,16 +767,16 @@ async def send_payment_report(update: Update, context: CallbackContext, display_
             
             output_total = BytesIO()
             with pd.ExcelWriter(output_total, engine='openpyxl') as writer:
-                df_total.to_excel(writer, sheet_name='Ամփոփ', index=False)
+                _drop_service_columns(df_total).to_excel(writer, sheet_name='Ամփոփ', index=False)
                 if all_payments:
                     # Создаем DataFrame из списка словарей
                     df_all_payments = pd.DataFrame(all_payments)
                     # Выбираем и переупорядочиваем нужные колонки
                     df_all_payments = df_all_payments[['amount', 'date_from', 'date_to', 'comment', 'created_at', 'spreadsheet_id', 'sheet_name']]
-                    df_all_payments.to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
+                    _drop_service_columns(df_all_payments).to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
                 else:
                     empty_all_payments = pd.DataFrame(columns=['amount', 'date_from', 'date_to', 'comment', 'created_at', 'spreadsheet_id', 'sheet_name'])
-                    empty_all_payments.to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
+                    _drop_service_columns(empty_all_payments).to_excel(writer, sheet_name='Բոլոր վճարումները', index=False)
 
             output_total.seek(0)
             await update.callback_query.message.reply_document(

@@ -5,37 +5,11 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from ...config.settings import ADMIN_IDS, UserRole, logger
 from ...utils.config_utils import (
     load_users, get_user_role, is_super_admin, is_admin,
-    can_add_records, can_view_payments, is_client, is_secondary
+    can_add_records, can_view_payments, is_client, is_secondary, is_shop_owner
 )
 
 def create_main_menu(user_id=None):
     """Создает главное меню"""
-    # Используем локализацию (функция _ определена в utils.localization)
-    try:
-        from ...utils.localization import _
-        add_record_text = _("buttons.add_record", user_id)
-        select_sheet_text = _("menu.select_sheet", user_id)
-        status_text = _("menu.status", user_id)
-        stats_text = _("menu.stats", user_id)
-        payments_text = _("menu.payments", user_id)
-        my_payments_text = _("menu.my_payments", user_id)
-        analytics_text = _("menu.analytics", user_id)
-        settings_text = _("menu.settings", user_id)
-    except Exception:
-        # Fallback на дефолтные строки (армянский/англ. символы)
-        add_record_text = "➕ Ավելացնել գրառում"
-        select_sheet_text = "📋 Ընտրել թերթիկ"
-        status_text = "📊 Կարգավիճակ"
-        stats_text = "📈 Վիճակագրություն"
-        select_spreadsheet_text = "📊 Ընտրել աղյուսակ"
-        payments_text = "💸 Վճարներ"
-        my_payments_text = "💰 Իմ վճարումները"
-        analytics_text = "📊 Վիճակագրություն"
-        settings_text = "⚙️ Կարգավորումներ"
-    
-    # Проверяем роль пользователя
-    user_role = get_user_role(user_id) if user_id else None
-
     # Клиенты не имеют доступа к меню
     if is_client(user_id):
         try:
@@ -48,29 +22,23 @@ def create_main_menu(user_id=None):
         ]
         return InlineKeyboardMarkup(keyboard)
 
-    # Создаем красивое структурированное меню
+    if is_shop_owner(user_id):
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("💼 Պարտքերի մնացորդ", callback_data="owner_debt_balance")]
+        ])
+
     keyboard = []
 
-    # Кнопки для пользователей, которые могут добавлять записи (Admin, Worker)
     if can_add_records(user_id):
-        keyboard.append([
-            InlineKeyboardButton(add_record_text, callback_data="add_record_select_sheet"),
-            InlineKeyboardButton(_("buttons.add_skip"), callback_data="add_skip_record_select_sheet")
-        ])
-
-    # Админские функции
-    if is_admin(user_id):
         keyboard.extend([
-            [
-                InlineKeyboardButton(payments_text, callback_data="pay_menu"),
-            ],
+            [InlineKeyboardButton("Ծախս", callback_data="expense_menu")],
+            [InlineKeyboardButton("Պարտք", callback_data="debt_menu")],
+            [InlineKeyboardButton("Պարտքի մարում", callback_data="repayment_menu")],
+            [InlineKeyboardButton("Վճարներ", callback_data="payments_menu")],
         ])
 
-    # Просмотр платежей для Worker, Secondary, Admin
-    if can_view_payments(user_id) and not is_admin(user_id):
-        keyboard.append([
-            InlineKeyboardButton(my_payments_text, callback_data="my_payments"),
-        ])
+    if can_view_payments(user_id) and not can_add_records(user_id):
+        keyboard.append([InlineKeyboardButton("Վճարներ", callback_data="my_payments")])
 
     # Супер-админ: управление ролями
     if is_super_admin(user_id):
@@ -94,6 +62,38 @@ def create_main_menu(user_id=None):
             InlineKeyboardButton(view_payments_text, callback_data="view_payments_secondary")
         ])
     
+    return InlineKeyboardMarkup(keyboard)
+
+
+def create_expense_type_menu():
+    """Подменю раздела расходов: Бригада / Магазин / Иное"""
+    keyboard = [
+        [InlineKeyboardButton("Բրիգադ", callback_data="expense_entity_type_brigade")],
+        [InlineKeyboardButton("Խանութ", callback_data="expense_entity_type_shop")],
+        [InlineKeyboardButton("Այլ", callback_data="expense_other")],
+        [InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def create_entity_selection_menu(entities, prefix: str, back_callback: str = "expense_menu"):
+    """Универсальная клавиатура выбора сущности из конфигурации"""
+    keyboard = []
+    for idx, entity in enumerate(entities):
+        title = entity.get('name') or f"Entity {idx + 1}"
+        keyboard.append([InlineKeyboardButton(title, callback_data=f"{prefix}_{idx}")])
+
+    keyboard.append([InlineKeyboardButton("⬅️ Հետ", callback_data=back_callback)])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def create_debt_type_menu(operation: str):
+    """Меню выбора типа сущности для долга/погашения"""
+    keyboard = [
+        [InlineKeyboardButton("Բրիգադ", callback_data=f"debt_entity_type_{operation}_brigade")],
+        [InlineKeyboardButton("Խանութ", callback_data=f"debt_entity_type_{operation}_shop")],
+        [InlineKeyboardButton("⬅️ Հետ", callback_data="back_to_menu")]
+    ]
     return InlineKeyboardMarkup(keyboard)
 
 def create_analytics_menu(user_id=None):
